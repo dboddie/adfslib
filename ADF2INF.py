@@ -202,8 +202,12 @@ def read_new_map(disc_type, begin, end):
     
         entry = str2num(2, sectors[a:a+2])
         
+        # The next entry to be read will occur one byte after this one
+        # unless one of the following checks override this behaviour.
+        next = a + 1
+        
         # Entry must be above 1 (defect)
-        if (entry & 0x7fff) > 1:
+        if (entry & 0x00ff) > 1:
         
             if current is None:
             
@@ -234,6 +238,8 @@ def read_new_map(disc_type, begin, end):
                 # file/directory to the list of objects associated
                 # with this file number.
                 map[current].append( [address] )
+            
+            next = a + 2
         
         if (entry & 0x8000) != 0 and current is not None:
         
@@ -260,10 +266,14 @@ def read_new_map(disc_type, begin, end):
             # Unset the current file number.
             current = None
             
-            # Move past the ending bit.
-            a = a + 1
+            # Move past the ending bit to an evenly aligned byte.
+            next = a + 2
+            
+            if next % 2 != 0:
+            
+                next = next + 1
         
-        a = a + 1
+        a = next
     
     #for k, v in map.items():
     #
