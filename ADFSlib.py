@@ -352,101 +352,114 @@ class ADFSdisc:
     
         a = begin
         
-        in_block = 0
-        block_no = None
-        terminated = 1
+        current = None
+        action = "read ID"
         
         while a < end:
         
-            value = ord(self.sectors[a])
+            if action == "read ID":
             
-            if not in_block:
-            
-                if value > 1:
+                # At the start of a block.
                 
-                    if terminated:
-                    
-                        # A file number was found. Read its value and begin to
-                        # read its length.
-                        value = self.str2num(2, self.sectors[a:a+2])
-                        
-                        entry = value & 0x7fff
-                        print hex(entry), hex(a)
-                        
-                        if not map.has_key(entry):
-                        
-                            # Create a new map entry corresponding to this value in
-                            # which the address of this entry is stored.
-                            map[entry] = [[a]]
-                        
-                        else:
-                        
-                            # Add this address to the map dictionary.
-                            map[entry].append([a])
-                        
-                        # Check whether this block finishes immediately.
-                        if (value & 0x8000) != 0:
-                        
-                            terminated = 1
-                            in_block = 0
-                            block_number = None
-                            next = a + 2
-                            
-                            print " immediate end at", hex(a)
-                            
-                            map[entry][-1].append(a + 2)
-                        
-                        else:
-                        
-                            terminated = 0
-                            in_block = 1
-                            block_number = entry
-                            next = a + 2
-                    
-                    elif not terminated:
-                    
-                        # An object was found outside the file blocks but
-                        # was not expected.
-                        
-                        if self.verify:
-                        
-                            self.verify_log.append(
-                                "An object was found but was not expected:" + \
-                                " %x" % (a + begin)
-                                )
-                        
-                        next = a + 1
+                value = self.str2num(2, self.sectors[a:a+2])
                 
-                elif value <= 1:
+                entry = value & 0x7fff
                 
-                    # Defects or free space found outside blocks.
+                if entry > 1:
+                
+                    #print hex(entry), hex(a)
+                    if not map.has_key(entry):
+                    
+                        # Create a new map entry corresponding to this value in
+                        # which the address of this entry is stored.
+                        map[entry] = [[a]]
+                    
+                    else:
+                    
+                        # Add this address to the map dictionary.
+                        map[entry].append([a])
+                    
+                    # Check whether this block finishes immediately.
+                    if (value & 0x8000) != 0:
+                    
+                        print " immediate end at", hex(a)
+                        
+                        map[entry][-1].append(a + 2)
+                        
+                        next = a + 2
+                        action = "read ID"
+                        current = None
+                    
+                    else:
+                    
+                        next = a + 2
+                        action = "find end marker"
+                        current = entry
+                
+                else:
+                
+                    # Space or defect
                     next = a + 1
             
-            elif in_block:
+            elif action == "find end marker":
             
-                if value != 0:
+                # In a block.
                 
-                    # The end of a block has been found.
-                    terminated = 1
-                    in_block = 0
-                    block_number = None
+                value = ord(self.sectors[a])
+                
+                if value == 0x80:
+                
+                    # The next block should start immediately after this
+                    # byte.
+                    if current is not None:
+                    
+                        map[current][-1].append(a + 1)
+                    
                     next = a + 1
-                    
-                    print "end at", hex(a)
-                    
-                    map[entry][-1].append(a + 1)
+                    action = "read ID"
+                    current = None
                 
                 elif value == 0:
                 
-                    # Continue reading until an end marker is found.
+                    # Continue reading the block.
                     next = a + 1
                 
-            else:
-            
-                # Space or defects.
+                else:
                 
-                # Keep scanning the map for a new block.
-                next = a + 1
+                    # Unknown data - search for a new block.
+                    if current is not None:
+                    
+                        map[current][-1].append(a)
+                    
+                    next = a + 1
+                    action = "find ID"
+                    current = None
+            
+            elif action == "find ID":
+            
+                # Possibly in a block, but still looking for the end.
+                
+                value = ord(self.sectors[a])
+                
+                if value == 0x80:
+                
+                    # End of block marker - go back two bytes and look for
+                    # a block ID.
+                    next = max(begin, a - 2)
+                    
+                    action = "read ID"
+                
+                elif value == 0:
+                
+                    # Space - go back two bytes and look for a block ID.
+                    next = max(begin, a - 2)
+                    
+                    action = "read ID"
+                
+                else:
+                
+                    # Other data - keep looking.
+                    next = a + 1
             
             a = next
         
