@@ -1105,7 +1105,8 @@ class ADFSdisc:
                 else:
                     self.extract_new_files(i[1], path, filetypes)
     
-    def extract_files(self, out_path, files = None, filetypes = 0):
+    def extract_files(self, out_path, files = None, filetypes = 0,
+                      separator = ","):
     
         if files is None:
         

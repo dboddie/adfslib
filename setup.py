@@ -34,5 +34,5 @@ setup(
     url="http://www.boddie.org.uk/david/Projects/Python/ADF2INF",
     version="0.31c",
     py_modules=["ADFSlib"],
-    scripts=["ADF2INF"]
+    scripts=["ADF2INF.py"]
     )
