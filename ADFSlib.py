@@ -20,7 +20,7 @@ class ADFS_exception(Exception):
 
 class ADFSdisc:
 
-    def __init__(self, adf):
+    def __init__(self, adf, verify = 0):
     
         # Check the properties using the length of the file
         adf.seek(0,2)
@@ -89,7 +89,13 @@ class ADFSdisc:
         #open('dump', 'wb').write(self.sectors)
         #sys.exit()
         
+        # Set the default disc name.
         self.disc_name = 'Untitled'
+        
+        # Read the files on the disc, logging problems if the verify flag
+        # is set.
+        self.verify = verify
+        self.verify_log = []
         
         if self.disc_type == 'adD':
         
@@ -357,7 +363,8 @@ class ADFSdisc:
             
             if (entry & 0xff) > 1 and (previous & 0x80) != 0:
             
-                #print hex(entry), hex(a)
+                print hex(entry), hex(a)
+                #if (entry & 0x80) != 0: print hex(a)
                 
                 if not map.has_key(entry):
                 
@@ -371,8 +378,11 @@ class ADFSdisc:
                     map[entry].append(a)
                 
                 # Store the value of the lowest byte to indicate that a block
-                # of data is being read.
-                previous = value & 0xff
+                # of data is being read. [This doesn't work for blocks
+                # beginning with file numbers containing 0x80 as the
+                # least significant byte.]
+                #previous = value & 0xff
+                previous = 0
             
             else:
             
@@ -383,6 +393,8 @@ class ADFSdisc:
                     previous = value & 0xff
             
             a = next
+        
+        # If the last entry is 
         
         return map
     
@@ -479,6 +491,29 @@ class ADFSdisc:
                 next = a + 2
             
             a = next
+        
+        # If the last piece is incomplete then use the end of the map as
+        # the end of the piece.
+        if len(pieces[-1]) != 2:
+        
+            if self.disc_type == 'adE':
+            
+                address = ((end - begin) * self.sector_size)
+            
+            elif self.disc_type == 'adEbig':
+            
+                upper = (entry & 0x7f00) >> 8
+                
+                if upper > 1:
+                    upper = upper - 1
+                if upper > 3:
+                    upper = 3
+                
+                address = ((end - begin) - (upper * 0xc8)) * 0x200
+            
+            # This is the end of the current entry. Modify the latest
+            # address to indicate a range of addresses.
+            pieces[-1].append(address)
         
         #print "Pieces:", map(lambda x: map(hex, x), pieces)
         
@@ -613,7 +648,11 @@ class ADFSdisc:
         dir_seq = self.sectors[head + p]
         dir_start = self.sectors[head+p+1:head+p+5]
         if dir_start != 'Hugo':
-            print 'Not a directory'
+        
+            if self.verify:
+            
+                self.verify_log.append('Not a directory: %x' % head)
+            
             return "", []
     
         p = p + 5
@@ -710,7 +749,14 @@ class ADFSdisc:
     
         dir_end = self.sectors[tail+self.sector_size-5:tail+self.sector_size-1]
         if dir_end != 'Hugo':
-            print 'Discrepancy in directory structure'
+        
+            if self.verify:
+            
+                self.verify_log.append(
+                    'Discrepancy in directory structure: [%x, %x] ' % \
+                        ( head, tail )
+                    )
+                        
             return '', files
     
         # Read the directory name, its parent and any title given.
@@ -750,7 +796,14 @@ class ADFSdisc:
     
         endseq = self.sectors[tail+self.sector_size-6]
         if endseq != dir_seq:
-            print 'Broken directory,', dir_title
+        
+            if self.verify:
+            
+                self.verify_log.append(
+                    'Broken directory: %s at [%x, %x]' % \
+                        (dir_title, head, tail)
+                    )
+            
             return dir_name, files
     
         return dir_name, files
@@ -801,8 +854,11 @@ class ADFSdisc:
         dir_seq = self.sectors[head + p]
         dir_start = self.sectors[head+p+1:head+p+5]
         if dir_start != 'Nick':
-            print 'Not a directory at '+hex(base)
-            #sys.exit()
+        
+            if self.verify:
+            
+                self.verify_log.append('Not a directory: %x' % head)
+            
             return '', []
     
         p = p + 5
@@ -836,23 +892,35 @@ class ADFSdisc:
     
                 if (newdiratts & 0x8) != 0:
                 
-                    print "Couldn't"+' find directory, "%s"' % name
+                    if self.verify:
                     
-                    print "at:", hex(head+p+22),
-                    print "file details:", hex(
-                        self.str2num(3, self.sectors[head+p+22:head+p+25])
-                        ),
-                    print "atts:", hex(newdiratts)
+                        self.verify_log.append(
+                            "Couldn't find directory: %s" % name
+                            )
+                        self.verify_log.append(
+                            "    at: %x" % (head+p+22)
+                            )
+                        self.verify_log.append(
+                            "    file details: %x" % \
+                            self.str2num(3, self.sectors[head+p+22:head+p+25])
+                            )
+                        self.verify_log.append("    atts: %x" % newdiratts)
                 
                 elif length != 0:
                 
-                    print "Couldn't"+' find file, "%s"' % name
+                    if self.verify:
                     
-                    print "at:", hex(head+p+22),
-                    print "file details:", hex(
-                        self.str2num(3, self.sectors[head+p+22:head+p+25])
-                        ),
-                    print "atts:", hex(newdiratts)
+                        self.verify_log.append(
+                            "Couldn't find file: %s" % name
+                            )
+                        self.verify_log.append(
+                            "    at: %x" % (head+p+22)
+                            )
+                        self.verify_log.append(
+                            "    file details: %x" % \
+                            self.str2num(3, self.sectors[head+p+22:head+p+25])
+                            )
+                        self.verify_log.append("    atts: %x" % newdiratts)
                 
                 else:
                 
@@ -895,6 +963,10 @@ class ADFSdisc:
                     file = ""
                     remaining = length
                     
+                    #print hex(head+p+22), name
+                    #print "addrs:", map(lambda x: map(hex, x), inddiscadd),
+                    #print "atts:", hex(newdiratts)
+                    
                     for start, end in inddiscadd:
                     
                         amount = min(remaining, end - start)
@@ -913,7 +985,14 @@ class ADFSdisc:
         dir_end = self.sectors[tail+self.sector_size-5:tail+self.sector_size-1]
     
         if dir_end != 'Nick':
-            print 'Discrepancy in directory structure'
+        
+            if self.verify:
+            
+                self.verify_log.append(
+                    'Discrepancy in directory structure: [%x, %x]' % \
+                        ( head, tail )
+                    )
+            
             return '', files
     
         dir_name = self.safe(
@@ -942,7 +1021,14 @@ class ADFSdisc:
     
         endseq = self.sectors[tail+self.sector_size-6]
         if endseq != dir_seq:
-            print 'Broken directory'
+        
+            if self.verify:
+            
+                self.verify_log.append(
+                    'Broken directory: %s at [%x, %x]' % \
+                        (dir_title, head, tail)
+                    )
+            
             return dir_name, files
     
         #print '<--'
@@ -1176,3 +1262,15 @@ class ADFSdisc:
         
         # Success
         return built
+    
+    def print_log(self):
+    
+        """print_log()
+        \r
+        \rPrint the disc verification log.
+        """
+        
+        for line in self.verify_log:
+        
+            print line
+

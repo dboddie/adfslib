@@ -26,7 +26,11 @@ if __name__ == "__main__":
         [-d | --create-directory]
         [(-t | --file-types) [(-s separator) | --separator=character]]
         <ADF file> <destination path>
-    )"""
+    ) |
+    (
+        (-v | --verify) <ADF file>
+    )
+    """
     
     version = __version__
     
@@ -62,6 +66,11 @@ if __name__ == "__main__":
         print "A separator used to append a suffix onto the file is optional and"
         print "defaults to the standard period character. e.g. myfile.fff"
         print
+        print "The -v flag causes the disc image to be checked for simple defects and"
+        print "determines whether there are files and directories which cannot be"
+        print "correctly located by this tool, whether due to a corrupted disc image"
+        print "or a bug in the image decoding techniques used."
+        print
         sys.exit()
     
     
@@ -72,12 +81,11 @@ if __name__ == "__main__":
     use_name = match.has_key("d") or match.has_key("create-directory")
     filetypes = match.has_key("t") or match.has_key("file-types")
     use_separator = match.has_key("s") or match.has_key("separator")
+    verify = match.has_key("v") or match.has_key("verify")
     
     adf_file = match["ADF file"]
     
-    if listing == 0:
-    
-        out_path = match["destination path"]
+    out_path = match.get("destination path", None)
     
     separator = match.get("separator", ",")
     
@@ -103,12 +111,30 @@ if __name__ == "__main__":
         sys.exit()
     
     
-    # Create an ADFSdisc instance using this file.
-    adfsdisc = ADFSlib.ADFSdisc(adf)
+    if verify == 0:
     
-    # Print catalogue
+        # Create an ADFSdisc instance using this file.
+        adfsdisc = ADFSlib.ADFSdisc(adf)
+    
+    else:
+    
+        # Verifying
+        
+        print "Verifying..."
+        print
+        
+        # Create an ADFSdisc instance using this file.
+        adfsdisc = ADFSlib.ADFSdisc(adf, verify = 1)
+        
+        adfsdisc.print_log()
+        
+        # Exit
+        sys.exit()
+    
+    
     if listing != 0:
     
+        # Print catalogue
         print 'Contents of', adfsdisc.disc_name,':'
         print
     
@@ -118,7 +144,6 @@ if __name__ == "__main__":
     
         # Exit
         sys.exit()
-    
     
     # Attempt to create a directory using the output path in case the user
     # wants to put the disc inside a directory to be sure that the disc won't
