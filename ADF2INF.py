@@ -45,7 +45,7 @@ except ImportError:
     use_getopt = 1
 
 
-__version__ = "0.34c (Sat 19th July 2003)"
+__version__ = "0.35c (Sun 20th July 2003)"
 
 default_convert_dict = {"/": "."}
 
@@ -102,28 +102,30 @@ def read_getopt_input(argv):
     
         return None
     
-    elif match.has_key("list") and len(args) != 1:
+    elif match.has_key("list"):
     
-        # For list operations, there should be one remaining argument.
-        return None
+        if len(args) != 1:
+        
+            # For list operations, there should be one remaining argument.
+            return None
     
-    elif match.has_key("verify") and len(args) != 1:
+    elif match.has_key("verify"):
     
-        # For verify operations, there should be one remaining argument.
-        return None
+        if len(args) != 1:
+        
+            # For verify operations, there should be one remaining argument.
+            return None
     
     elif len(args) != 2:
     
         # For all other operations, there should be two remaining arguments.
         return None
     
-    else:
+    i = 0
+    for arg in args:
     
-        i = 0
-        for arg in args:
-        
-            match[arg_list[i]] = arg
-            i = i + 1
+        match[arg_list[i]] = arg
+        i = i + 1
     
     if match == {}: match = None
     
