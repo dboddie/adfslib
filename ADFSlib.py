@@ -58,7 +58,7 @@ class ADFSdisc:
                 self.sector_size = 1024
                 interleave = 0
                 self.disc_type = 'adD'
-        
+            
             elif self.identify_format(adf) == 'E':
                 self.ntracks = 80
                 self.nsectors = 10
@@ -661,7 +661,8 @@ class ADFSdisc:
             if self.disc_type == 'adD':
             
                 # Old format 800K discs.
-                if olddirobseq == 0xc:
+                #if olddirobseq == 0xc:
+                if (olddirobseq & 0x8) == 0x8:
                 
                     # A directory has been found.
                     lower_dir_name, lower_files = \
