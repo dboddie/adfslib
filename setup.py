@@ -32,7 +32,7 @@ setup(
     author="David Boddie",
     author_email="david@boddie.org.uk",
     url="http://www.boddie.org.uk/david/Projects/Python/ADFSlib/",
-    version="0.13",
+    version="0.14",
     py_modules=["ADFSlib"],
     scripts=["ADF2INF.py"]
     )

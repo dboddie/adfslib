@@ -26,8 +26,8 @@ DEALINGS IN THE SOFTWARE.
 """
 
 __author__ = "David Boddie <david@boddie.org.uk>"
-__date__ = "Wed 2nd July 2003"
-__version__ = "0.13"
+__date__ = "Thu 3rd July 2003"
+__version__ = "0.14"
 
 
 import os, string
@@ -1214,12 +1214,16 @@ class ADFSdisc:
     def create_directory(self, path, name = None):
     
         elements = []
-         
-        while path != "":
+        
+        while not os.path.exists(path) and path != "":
         
             path, file = os.path.split(path)
             
             elements.insert(0, file)
+        
+        if path != "":
+        
+            elements.insert(0, path)
         
         if name is not None:
         
