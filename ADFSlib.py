@@ -1034,9 +1034,20 @@ class ADFSdisc:
     
     def extract_old_files(self, l, path, filetypes = 0, separator = ","):
     
+        new_path = self.create_directory(path)
+        
+        if new_path != "":
+        
+            path = new_path
+        
+        else:
+        
+            return
+        
         for i in l:
         
             name = i[0]
+            
             if type(i[1]) != type([]):
             
                 # A file.
@@ -1055,7 +1066,7 @@ class ADFSdisc:
                         out.write(i[1])
                         out.close()
                     except IOError:
-                        print "Couldn't open the file, %s" % out_file
+                        print "Couldn't open the file: %s" % out_file
                     
                     try:
                         inf = open(inf_file, "w")
@@ -1064,7 +1075,7 @@ class ADFSdisc:
                                    ( name, load, exec_addr, length ) )
                         inf.close()
                     except IOError:
-                        print "Couldn't open the file, %s" % inf_file
+                        print "Couldn't open the file: %s" % inf_file
                 
                 else:
                 
@@ -1077,26 +1088,30 @@ class ADFSdisc:
                         out.write(i[1])
                         out.close()
                     except IOError:
-                        print "Couldn't open the file, %s" % out_file
+                        print "Couldn't open the file: %s" % out_file
             else:
             
-                if name != '$':
+                new_path = os.path.join(path, name)
                 
-                    new_path = self.create_directory(path, name)
-                    
-                    if new_path != "":
-                    
-                        self.extract_old_files(i[1], new_path, filetypes)
-                    
-                else:
-                    self.extract_old_files(i[1], path, filetypes)
+                self.extract_old_files(i[1], new_path, filetypes)
     
     
     def extract_new_files(self, l, path, filetypes = 0, separator = ","):
     
+        new_path = self.create_directory(path)
+        
+        if new_path != "":
+        
+            path = new_path
+        
+        else:
+        
+            return
+        
         for i in l:
         
             name = i[0]
+            
             if type(i[1]) != type([]):
             
                 # A file.
@@ -1115,7 +1130,7 @@ class ADFSdisc:
                         out.write(i[1])
                         out.close()
                     except IOError:
-                        print "Couldn't open the file, %s" % out_file
+                        print "Couldn't open the file: %s" % out_file
                     
                     try:
                         inf = open(inf_file, "w")
@@ -1124,7 +1139,7 @@ class ADFSdisc:
                                    ( name, load, exec_addr, length ) )
                         inf.close()
                     except IOError:
-                        print "Couldn't open the file, %s" % inf_file
+                        print "Couldn't open the file: %s" % inf_file
                 else:
                 
                     # Interpret the load address as a filetype.
@@ -1136,19 +1151,13 @@ class ADFSdisc:
                         out.write(i[1])
                         out.close()
                     except IOError:
-                        print "Couldn't open the file, %s" % out_file
+                        print "Couldn't open the file: %s" % out_file
             else:
             
-                if name != '$':
+                new_path = os.path.join(path, name)
                 
-                    new_path = self.create_directory(path, name)
-                    
-                    if new_path != "":
-                    
-                        self.extract_new_files(i[1], new_path, filetypes)
-                    
-                else:
-                    self.extract_new_files(i[1], path, filetypes)
+                self.extract_new_files(i[1], new_path, filetypes)
+    
     
     def extract_files(self, out_path, files = None, filetypes = 0,
                       separator = ","):
@@ -1173,12 +1182,16 @@ class ADFSdisc:
         
             self.extract_old_files(files, out_path, filetypes)
     
-    def create_directory(self, path, name):
+    def create_directory(self, path, name = None):
     
-        elements = list(os.path.split(path)) + [name]
+        elements = list(os.path.split(path))
         
-        # Remove any empty list elements.
-        elements = filter(lambda x: x != '', elements)
+        if name is not None:
+        
+            elements.append(name)
+        
+        # Remove any empty list elements or those containing a $ character.
+        elements = filter(lambda x: x != '' and x != "$", elements)
         
         try:
         
