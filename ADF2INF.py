@@ -176,7 +176,8 @@ def read_disc_info(disc_type):
 
         record = read_disc_record(4)
         map_start, map_end = 0x40, 0x400
-        map = read_new_map(disc_type, map_start, map_end)
+        #map = read_new_map(disc_type, map_start, map_end)
+        map = scan_new_map(map_start, map_end)
         
         return record['disc name'], map
 
@@ -184,7 +185,8 @@ def read_disc_info(disc_type):
 
         record = read_disc_record(0xc6804)
         map_start, map_end = 0xc6840, 0xc7800
-        map = read_new_map(disc_type, map_start, map_end)
+        #map = read_new_map(disc_type, map_start, map_end)
+        map = scan_new_map(map_start, map_end)
 
         return record['disc name'], map
 
@@ -288,9 +290,52 @@ def read_new_map(disc_type, begin, end):
     return map
 
 
+def scan_new_map(begin, end):
+
+    map = {}
+
+    a = begin
+    
+    previous = 0x80
+    
+    while a < end:
+    
+        value = str2num(2, sectors[a:a+2])
+        entry = value & 0x7fff
+        
+        next = a + 1
+        
+        if (entry & 0xff) > 1 and (previous & 0x80) != 0:
+        
+            #print hex(entry), hex(a)
+            
+            if not map.has_key(entry):
+            
+                # Create a new map entry corresponding to this value in which
+                # the address of this entry is stored.
+                map[entry] = [a]
+            
+            else:
+            
+                # Add this address to the map dictionary.
+                map[entry].append(a)
+        
+        previous = value & 0xff
+        a = next
+    
+    return map
+
+
 def find_in_new_map(disc_type, begin, end, file_no):
 
+    #print "File number:", hex(file_no)
+    
     if file_no < 2:
+    
+        return []
+    
+    # Note that disc_map is global in this implementation.
+    if not disc_map.has_key(file_no):
     
         return []
     
@@ -300,8 +345,19 @@ def find_in_new_map(disc_type, begin, end, file_no):
     
     in_piece = 0
     
+    # Retrieve the list of possible starting addresses for this file number.
+    starts = disc_map[file_no]
+    in_starts = 0
+    
+    #print "Map scan:", map(hex, starts)
+    
     while a < end:
     
+        if in_piece == 0 and in_starts < len(starts):
+        
+            a = starts[in_starts]
+            in_starts = in_starts + 1
+        
         entry = str2num(2, sectors[a:a+2])
         
         # The next entry to be read will occur one byte after this one
@@ -360,6 +416,8 @@ def find_in_new_map(disc_type, begin, end, file_no):
             next = a + 2
         
         a = next
+    
+    #print "Pieces:", map(lambda x: map(hex, x), pieces)
     
     return pieces
 
@@ -577,7 +635,7 @@ def read_old_catalogue(disc_type, base):
     return dir_name, files
 
 
-def read_new_address(s, dir = 0):
+def read_new_address(s):
 
     # From the three character string passed, determine the address on the disc
     value = str2num(3, s)
@@ -617,13 +675,13 @@ def read_new_catalogue(disc_type, base):
     head = base
     p = 0
     
-    #print hex(head)
+    #print "Head:", hex(head)
     
     dir_seq = sectors[head + p]
     dir_start = sectors[head+p+1:head+p+5]
     if dir_start != 'Nick':
         print 'Not a directory at '+hex(base)
-        sys.exit()
+        #sys.exit()
         return '', []
 
     p = p + 5
@@ -648,11 +706,12 @@ def read_new_catalogue(disc_type, base):
         exe = str2num(4, sectors[head+p+14:head+p+18])
         length = str2num(4, sectors[head+p+18:head+p+22])
 
-        inddiscadd_pre = sectors[head+p+22:head+p+25]
+        inddiscadd = read_new_address(sectors[head+p+22:head+p+25])
         newdiratts = str2num(1, sectors[head+p+25])
         
-        inddiscadd = read_new_address(inddiscadd_pre, dir = ((newdiratts & 0x8) != 0))
-        #print hex(head+p+22), hex(str2num(3, sectors[head+p+22:head+p+25]))
+        #print hex(head+p+22),
+        #print "addrs:", map(lambda x: map(hex, x), inddiscadd),
+        #print "atts:", hex(newdiratts)
         
         if inddiscadd == -1:
 
@@ -679,8 +738,11 @@ def read_new_catalogue(disc_type, base):
                 # Remember that inddiscadd will be a sequence of
                 # pairs of addresses.
                 
+                #print inddiscadd
+                
                 for start, end in inddiscadd:
                 
+                    #print hex(start), hex(end), "-->"
                     # Try to interpret the data at the referenced address as a
                     # directory.
                     
@@ -740,6 +802,7 @@ def read_new_catalogue(disc_type, base):
         return dir_name, files
 
     #print '<--'
+    #print
 
     return dir_name, files
 
