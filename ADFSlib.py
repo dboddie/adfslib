@@ -466,6 +466,25 @@ class ADFSdisc:
         return map
     
     
+    def find_address_from_map(self, addr, begin, entry):
+    
+        if self.disc_type == 'adE':
+        
+            address = ((addr - begin) * self.sector_size)
+        
+        elif self.disc_type == 'adEbig':
+        
+            upper = (entry & 0x7f00) >> 8
+            
+            if upper > 1:
+                upper = upper - 1
+            if upper > 3:
+                upper = 3
+            
+            address = ((addr - begin) - (upper * 0xc8)) * 0x200
+        
+        return address
+    
     def find_in_new_map(self, begin, end, file_no):
     
         #print "File number:", hex(file_no)
@@ -474,146 +493,100 @@ class ADFSdisc:
         
             return []
         
-        # Check that the file number exists in the disc map by checking the
-        # map summary created by the scan_new_map method.
-        if not self.disc_map.has_key(file_no):
-        
-            return []
-        
         a = begin
         
+        # Create a list containing the start and end addresses of the
+        # file/directory associated with this file number.
         pieces = []
         
-        in_piece = 0
-        
-        # Retrieve the list of possible starting addresses for this file
-        # number.
-        pairs = self.disc_map[file_no]
-        
-        for start, finish in pairs:
-        
-            if self.disc_type == 'adE':
-            
-                start_address = ((start - begin) * self.sector_size)
-                finish_address = ((finish - begin) * self.sector_size)
-            
-            elif self.disc_type == 'adEbig':
-            
-                upper = (file_no & 0x7f00) >> 8
-                
-                if upper > 1:
-                    upper = upper - 1
-                if upper > 3:
-                    upper = 3
-                
-                start_address = ((start - begin) - (upper * 0xc8)) * 0x200
-                finish_address = ((finish - begin) - (upper * 0xc8)) * 0x200
-            
-            # Add a list containing the start address of the
-            # file/directory to the list of objects associated
-            # with this file number.
-            pieces.append( [start_address, finish_address] )
-        
-        return pieces
-
-    """
-        in_starts = 0
-        
-        #print "Map scan:", map(hex, starts)
+        current_piece = None
+        current_start = 0
         
         while a < end:
         
-            if in_piece == 0 and in_starts < len(starts):
-            
-                a = starts[in_starts]
-                in_starts = in_starts + 1
-            
-            entry = self.str2num(2, self.sectors[a:a+2])
-            
             # The next entry to be read will occur one byte after this one
             # unless one of the following checks override this behaviour.
             next = a + 1
             
-            if (entry & 0x7fff) == file_no:
+            if current_piece is None:
             
-                if self.disc_type == 'adE':
+                value = self.str2num(2, self.sectors[a:a+2])
                 
-                    address = ((a - begin) * self.sector_size)
+                entry = value & 0x7fff
                 
-                elif self.disc_type == 'adEbig':
+                if entry == file_no:
                 
-                    upper = (entry & 0x7f00) >> 8
+                    next = a + 2
                     
-                    if upper > 1:
-                        upper = upper - 1
-                    if upper > 3:
-                        upper = 3
+                    if (value & 0x8000) == 0:
                     
-                    address = ((a - begin) - (upper * 0xc8)) * 0x200
+                        current_piece = entry
+                        current_start = a
+                    
+                    else:
+                    
+                        # Add the block to the list of pieces found.
+                        pieces.append(
+                            [ self.find_address_from_map(a, begin, entry),
+                              self.find_address_from_map(next, begin, entry)
+                            ] )
                 
-                # Add a list containing the start address of the
-                # file/directory to the list of objects associated
-                # with this file number.
-                pieces.append( [address] )
+                else:
                 
-                in_piece = 1
+                    # Search for a valid file number.
+                    next = a + 1
                 
-                next = a + 1
+            else:
             
-            if in_piece == 1 and (entry & 0x8000) != 0:
-            
-                if self.disc_type == 'adE':
+                # In a piece being read.
                 
-                    address = ((a + 2 - begin) * self.sector_size)
+                value = ord(self.sectors[a])
                 
-                elif self.disc_type == 'adEbig':
+                if value == 0:
                 
-                    upper = (entry & 0x7f00) >> 8
+                    # Still in the block.
+                    next = a + 1
+                
+                elif value == 0x80:
+                
+                    # At the end of the block.
+                    next = a + 1
                     
-                    if upper > 1:
-                        upper = upper - 1
-                    if upper > 3:
-                        upper = 3
+                    # Add the block to the list of pieces found.
+                    pieces.append(
+                        [ self.find_address_from_map(
+                              current_start, begin, current_piece
+                              ),
+                          self.find_address_from_map(
+                              next, begin, current_piece
+                              )
+                        ] )
                     
-                    address = ((a + 2 - begin) - (upper * 0xc8)) * 0x200
+                    current_piece = None
                 
-                # This is the end of the current entry. Modify the latest
-                # address to indicate a range of addresses.
-                pieces[-1].append(address)
+                else:
                 
-                in_piece = 0
-                
-                next = a + 2
+                    # The byte found was unexpected - backtrack to the
+                    # byte after the start of this block and try again.
+                    next = current_start + 1
+                    current_piece = None
             
             a = next
         
         # If the last piece is incomplete then use the end of the map as
         # the end of the piece.
-        if len(pieces[-1]) != 2:
+        if current_piece is not None:
         
-            if self.disc_type == 'adE':
-            
-                address = ((end - begin) * self.sector_size)
-            
-            elif self.disc_type == 'adEbig':
-            
-                upper = (entry & 0x7f00) >> 8
-                
-                if upper > 1:
-                    upper = upper - 1
-                if upper > 3:
-                    upper = 3
-                
-                address = ((end - begin) - (upper * 0xc8)) * 0x200
-            
-            # This is the end of the current entry. Modify the latest
-            # address to indicate a range of addresses.
-            pieces[-1].append(address)
+            pieces.append(
+                [ self.find_address_from_map(
+                      current_start, begin, current_piece
+                      ),
+                  self.find_address_from_map(end, begin, current_piece)
+                ] )
         
         #print "Pieces:", map(lambda x: map(hex, x), pieces)
         
         return pieces
-    """    
     
     def read_tracks(self, f, inter):
     
