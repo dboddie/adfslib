@@ -47,7 +47,7 @@ class ADFSdisc:
             self.ntracks = 160
             self.nsectors = 16        # per track
             self.sector_size = 256    # in bytes
-            interleave = 1
+            interleave = 0 # 1
             self.disc_type = 'adl'
         
         elif length == 819200:
@@ -135,21 +135,19 @@ class ADFSdisc:
     
     def binary(self, size, n):
     
-        s = size
-        i = n
         new = ""
-        while (i > 0) & (s > 0):
-    
-            if (i & 1)==1:
+        while (n != 0) & (size > 0):
+        
+            if (n & 1)==1:
                 new = "1" + new
             else:
                 new = "0" + new
     
-            i = i >> 1
-            s = s - 1
+            n = n >> 1
+            size = size - 1
     
-        if s > 0:
-            new = ("0"*s) + new
+        if size > 0:
+            new = ("0"*size) + new
     
         return new
     
@@ -611,7 +609,7 @@ class ADFSdisc:
         head = base
     #    base = sector_size*2
         p = 0
-    
+        
         dir_seq = self.sectors[head + p]
         dir_start = self.sectors[head+p+1:head+p+5]
         if dir_start != 'Hugo':
@@ -651,7 +649,13 @@ class ADFSdisc:
     
             #print string.expandtabs(
             #   "%s\t%s\t%s\t%s" % (
-            #       name, "("+binary(8, olddirobseq)+")", hex(load), hex(exe)
+            #       name, "("+self.binary(8, olddirobseq)+")",
+            #       "("+self.binary(8, load)+")",
+            #       "("+self.binary(8, exe)+")"
+            #   ) )
+            #print string.expandtabs(
+            #   "%s\t%02x\t%08x\t%08x" % (
+            #       name, olddirobseq, load, exe
             #   ) )
     
             if self.disc_type == 'adD':
@@ -675,7 +679,9 @@ class ADFSdisc:
             else:
             
                 # Old format < 800K discs.
-                if (load == 0) & (exe == 0) & (top_set > 2):
+                # [Needs more accurate check for directories.]
+                if (load == 0 and exe == 0 and top_set > 2) or \
+                    (top_set > 0 and length == (self.sector_size * 5)):
                 
                     # A directory has been found.
                     lower_dir_name, lower_files = \
