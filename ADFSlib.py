@@ -352,45 +352,68 @@ class ADFSdisc:
     
         a = begin
         
-        previous = 0x80
+        in_block = 0
+        block_no = None
         
         while a < end:
         
             value = self.str2num(2, self.sectors[a:a+2])
             entry = value & 0x7fff
             
-            next = a + 1
+            if (entry & 0xff) > 1:
             
-            if (entry & 0xff) > 1 and (previous & 0x80) != 0:
+                if (entry & 0xff) != 0x80 or not in_block:
+                
+                    # Markers with low bytes whose top bits are not set
+                    # are immediately noted. Markers with low bytes whose
+                    # top bits are set (actually only the 0x80 bytes) can
+                    # only be collected when outside a block.
+                
+                    #print hex(entry), hex(a)
+                    #if (entry & 0x80) != 0: print hex(a)
+                    
+                    if not map.has_key(entry):
+                    
+                        # Create a new map entry corresponding to this value in
+                        # which the address of this entry is stored.
+                        map[entry] = [a]
+                    
+                    else:
+                    
+                        # Add this address to the map dictionary.
+                        map[entry].append(a)
+                    
+                    # Check whether this block finishes immediately.
+                    if (value & 0x8000) != 0:
+                    
+                        in_block = 0
+                        block_number = None
+                        next = a + 1
+                    
+                    else:
+                    
+                        in_block = 1
+                        block_number = entry
+                        next = a + 1
             
-                print hex(entry), hex(a)
-                #if (entry & 0x80) != 0: print hex(a)
+                elif (entry & 0x80) == 0x80 and in_block:
                 
-                if not map.has_key(entry):
-                
-                    # Create a new map entry corresponding to this value in
-                    # which the address of this entry is stored.
-                    map[entry] = [a]
+                    # The end of a block has been found.
+                    in_block = 0
+                    block_number = None
+                    next = a + 1
                 
                 else:
                 
-                    # Add this address to the map dictionary.
-                    map[entry].append(a)
-                
-                # Store the value of the lowest byte to indicate that a block
-                # of data is being read. [This doesn't work for blocks
-                # beginning with file numbers containing 0x80 as the
-                # least significant byte.]
-                #previous = value & 0xff
-                previous = 0
+                    # Keep scanning the map for an end of block marker.
+                    next = a + 1
             
             else:
             
-                # Store the previous byte only if it is represents data in
-                # the map (either beginning or ending).
-                if (entry & 0xff) > 1:
+                # Space or defects.
                 
-                    previous = value & 0xff
+                # Keep scanning the map for a new block.
+                next = a + 1
             
             a = next
         
@@ -1269,6 +1292,11 @@ class ADFSdisc:
         \r
         \rPrint the disc verification log.
         """
+        
+        if self.verify_log == []:
+        
+            print "No problems found."
+            return
         
         for line in self.verify_log:
         
