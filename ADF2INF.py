@@ -36,16 +36,22 @@ if __name__ == "__main__":
     
     syntax_obj = cmdsyntax.Syntax(syntax)
     
-    matches = syntax_obj.get_args(sys.argv[1:])
+    matches, failed = syntax_obj.get_args(sys.argv[1:], return_failed = 1)
     
-    if matches == [] and cmdsyntax.use_GUI() != None:
+    if len(matches) != 1 and cmdsyntax.use_GUI() != None:
     
-        form = cmdsyntax.Form("ADF2INF", syntax_obj)
+        form = cmdsyntax.Form("ADF2INF", syntax_obj, failed[0])
         
-        matches = [form.get_args()]
+        matches = form.get_args()
     
-    # Take the first match.
-    match = matches[0]
+    # Take the first match, if possible.
+    if len(matches) > 0:
+    
+        match = matches[0]
+    
+    else:
+    
+        match = None
     
     if match == {} or match is None:
     
@@ -106,7 +112,7 @@ if __name__ == "__main__":
     try:
         adf = open(adf_file, "rb")
     except IOError:
-        print "Couldn't open the ADF file, %s" % adf_file
+        print "Couldn't open the ADF file: %s" % adf_file
         print
         sys.exit()
     
