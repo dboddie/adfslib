@@ -346,79 +346,6 @@ class ADFSdisc:
         return map
     
     
-    def _scan_new_map(self, begin, end):
-    
-        map = {}
-    
-        a = begin
-        
-        in_block = 0
-        block_no = None
-        
-        while a < end:
-        
-            value = ord(self.sectors[a])
-            
-            if not in_block and value > 1:
-            
-                # A file number was found. Read its value and begin to
-                # read its length.
-                value = self.str2num(2, self.sectors[a:a+2])
-                
-                entry = value & 0x7fff
-                print hex(entry), hex(a)
-                
-                if not map.has_key(entry):
-                
-                    # Create a new map entry corresponding to this value in
-                    # which the address of this entry is stored.
-                    map[entry] = [[a]]
-                
-                else:
-                
-                    # Add this address to the map dictionary.
-                    map[entry].append([a])
-                
-                # Check whether this block finishes immediately.
-                if (value & 0x8000) != 0:
-                    
-                    in_block = 0
-                    block_number = None
-                    next = a + 2
-                    
-                    print " immediate end at", hex(a)
-                    
-                    map[entry][-1].append(a + 2)
-                
-                else:
-                
-                    in_block = 1
-                    block_number = entry
-                    next = a + 2
-            
-            elif in_block and value != 0:
-            
-                # The end of a block has been found.
-                in_block = 0
-                block_number = None
-                next = a + 1
-                
-                print "end at", hex(a)
-                
-                map[entry][-1].append(a + 1)
-                
-            else:
-            
-                # Space or defects.
-                
-                # Keep scanning the map for a new block.
-                next = a + 1
-            
-            a = next
-        
-        return map
-    
-    
     def scan_new_map(self, begin, end):
     
         map = {}
@@ -427,58 +354,92 @@ class ADFSdisc:
         
         in_block = 0
         block_no = None
+        terminated = 1
         
         while a < end:
         
             value = ord(self.sectors[a])
             
-            if not in_block and value > 1:
+            if not in_block:
             
-                # A file number was found. Read its value and begin to
-                # read its length.
-                value = self.str2num(2, self.sectors[a:a+2])
+                if value > 1:
                 
-                entry = value & 0x7fff
-                print hex(entry), hex(a)
-                
-                if not map.has_key(entry):
-                
-                    # Create a new map entry corresponding to this value in
-                    # which the address of this entry is stored.
-                    map[entry] = [[a]]
-                
-                else:
-                
-                    # Add this address to the map dictionary.
-                    map[entry].append([a])
-                
-                # Check whether this block finishes immediately.
-                if (value & 0x8000) != 0:
+                    if terminated:
                     
+                        # A file number was found. Read its value and begin to
+                        # read its length.
+                        value = self.str2num(2, self.sectors[a:a+2])
+                        
+                        entry = value & 0x7fff
+                        print hex(entry), hex(a)
+                        
+                        if not map.has_key(entry):
+                        
+                            # Create a new map entry corresponding to this value in
+                            # which the address of this entry is stored.
+                            map[entry] = [[a]]
+                        
+                        else:
+                        
+                            # Add this address to the map dictionary.
+                            map[entry].append([a])
+                        
+                        # Check whether this block finishes immediately.
+                        if (value & 0x8000) != 0:
+                        
+                            terminated = 1
+                            in_block = 0
+                            block_number = None
+                            next = a + 2
+                            
+                            print " immediate end at", hex(a)
+                            
+                            map[entry][-1].append(a + 2)
+                        
+                        else:
+                        
+                            terminated = 0
+                            in_block = 1
+                            block_number = entry
+                            next = a + 2
+                    
+                    elif not terminated:
+                    
+                        # An object was found outside the file blocks but
+                        # was not expected.
+                        
+                        if self.verify:
+                        
+                            self.verify_log.append(
+                                "An object was found but was not expected:" + \
+                                " %x" % (a + begin)
+                                )
+                        
+                        next = a + 1
+                
+                elif value <= 1:
+                
+                    # Defects or free space found outside blocks.
+                    next = a + 1
+            
+            elif in_block:
+            
+                if value != 0:
+                
+                    # The end of a block has been found.
+                    terminated = 1
                     in_block = 0
                     block_number = None
-                    next = a + 2
+                    next = a + 1
                     
-                    print " immediate end at", hex(a)
+                    print "end at", hex(a)
                     
-                    map[entry][-1].append(a + 2)
+                    map[entry][-1].append(a + 1)
                 
-                else:
+                elif value == 0:
                 
-                    in_block = 1
-                    block_number = entry
-                    next = a + 2
-            
-            elif in_block and value != 0:
-            
-                # The end of a block has been found.
-                in_block = 0
-                block_number = None
-                next = a + 1
-                
-                print "end at", hex(a)
-                
-                map[entry][-1].append(a + 1)
+                    # Continue reading until an end marker is found.
+                    next = a + 1
                 
             else:
             
