@@ -26,8 +26,8 @@ DEALINGS IN THE SOFTWARE.
 """
 
 __author__ = "David Boddie <david@boddie.org.uk>"
-__date__ = "Tue 15th April 2003"
-__version__ = "0.11"
+__date__ = "Wed 2nd July 2003"
+__version__ = "0.13"
 
 
 import os, string

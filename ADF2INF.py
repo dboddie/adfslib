@@ -45,7 +45,7 @@ except ImportError:
     use_getopt = 1
 
 
-__version__ = "0.32c (Tue 15th April 2003)"
+__version__ = "0.33c (Wed 2nd July 2003)"
 
 
 def read_cmdsyntax_input(argv, syntax):
@@ -148,6 +148,7 @@ if __name__ == "__main__":
         print "Syntax: ADF2INF.py " + syntax
         print
         print 'ADF2INF version ' + __version__
+        print 'ADFSlib version ' + ADFSlib.__version__
         print
         print 'Take the files stored in the directory given and store them as files with'
         print 'corresponding INF files.'
