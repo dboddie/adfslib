@@ -26,8 +26,8 @@ DEALINGS IN THE SOFTWARE.
 """
 
 __author__ = "David Boddie <david@boddie.org.uk>"
-__date__ = "Thu 3rd July 2003"
-__version__ = "0.14"
+__date__ = "Sat 19th July 2003"
+__version__ = "0.20"
 
 
 import os, string
@@ -127,7 +127,7 @@ class ADFSdisc:
         
             # Read the disc name and map
             self.disc_name = self.read_disc_info()
-        
+            
             # Find the root directory name and all the files and directories
             # contained within it
             self.root_name, self.files = self.read_new_catalogue(0x800)
@@ -136,12 +136,13 @@ class ADFSdisc:
         
             # Read the disc name and map
             self.disc_name = self.read_disc_info()
-        
+            
             # Find the root directory name and all the files and directories
             # contained within it
             self.root_name, self.files = self.read_new_catalogue(0xc8800)
         
         else:
+        
             # Find the root directory name and all the files and directories
             # contained within it
             self.root_name, self.files = self.read_old_catalogue(2*self.sector_size)
@@ -152,10 +153,10 @@ class ADFSdisc:
         i = 0
         n = 0
         while i < size:
-    
+        
             n = n | (ord(s[i]) << (i*8))
             i = i + 1
-    
+        
         return n
     
     
@@ -168,13 +169,13 @@ class ADFSdisc:
                 new = "1" + new
             else:
                 new = "0" + new
-    
+            
             n = n >> 1
             size = size - 1
-    
+        
         if size > 0:
             new = ("0"*size) + new
-    
+        
         return new
     
     
@@ -187,7 +188,7 @@ class ADFSdisc:
         adf.seek(0x801)
         word2 = adf.read(4)
         adf.seek(0)
-    
+        
         if word1 == 'Hugo':
             return 'D'
         elif word2 == 'Nick':
@@ -214,7 +215,7 @@ class ADFSdisc:
             density = 'quad'        # Quad density disc
         else:
             density = 'unknown'
-    
+        
         # LowSector
         # StartUp
         # LinkBits
@@ -237,7 +238,7 @@ class ADFSdisc:
         disc_id   = self.str2num(2, self.sectors[offset + 20 : offset + 22])
         # DiscName
         disc_name = string.strip(self.sectors[offset + 22 : offset + 32])
-    
+        
         return {'sectors': nsectors, 'heads': heads, 'density': density,
             'disc size': disc_size, 'disc ID': disc_id,
             'disc name': disc_name, 'zones': zones, 'root': root}
@@ -263,7 +264,7 @@ class ADFSdisc:
             return self.record['disc name'] #, map
         
         if self.disc_type == 'adEbig':
-    
+        
             self.record = self.read_disc_record(0xc6804)
             self.map_header = 0xc6800
             self.map_start, self.map_end = 0xc6840, 0xc7800
@@ -285,7 +286,7 @@ class ADFSdisc:
     def read_new_map(self, header, begin, end):
     
         disc_map = {}
-    
+        
         a = begin
         
         current_piece = None
@@ -304,7 +305,8 @@ class ADFSdisc:
             
             if (a % self.sector_size) < 4:
             
-                # In a zone header.
+                # In a zone header. Not the first zone header as this
+                # was already skipped when we started reading.
                 next = a + 4 - (a % self.sector_size)
                 
                 # Set the next zone offset.
@@ -328,6 +330,8 @@ class ADFSdisc:
             
             elif current_piece is None and (next_zone - a) >= 2:
             
+                # If there is enough space left in this zone to allow
+                # further fragments then read the next two bytes.
                 value = self.str2num(2, self.sectors[a:a+2])
                 
                 entry = value & 0x7fff
@@ -336,14 +340,14 @@ class ADFSdisc:
                 # the disc address and hence the file number.
                 # i.e.the top bit of the file number cannot be set.
                 
-                if entry == 1:
+                #if entry == 1:
+                #
+                #    # File number 1 (defect)
+                #    next = a + 2
+                #
+                if entry >= 1:
                 
-                    # File number 1 (defect)
-                    next = a + 2
-                
-                elif entry > 1:
-                
-                    # Files or directories (greater than 1)
+                    # Defects (1), files or directories (greater than 1)
                     next = a + 2
                     
                     # Define a new entry.
@@ -351,6 +355,7 @@ class ADFSdisc:
                     
                     if not disc_map.has_key(entry):
                     
+                        # Create a new map entry if none exists.
                         disc_map[entry] = []
                     
                     if (value & 0x8000) == 0:
@@ -363,7 +368,8 @@ class ADFSdisc:
                     
                         # For an immediately terminated fragment, add the
                         # extents of the block to the list of pieces found
-                        # and implicitly finish reading this fragment.
+                        # and implicitly finish reading this fragment
+                        # (current_piece remains None).
                         
                         start_addr = self.find_address_from_map(
                             a, begin, entry
@@ -413,6 +419,7 @@ class ADFSdisc:
                             [ start_addr, end_addr]
                             )
                     
+                    # Look for a new fragment.
                     current_piece = None
                 
                 else:
@@ -540,27 +547,28 @@ class ADFSdisc:
     def read_tracks(self, f, inter):
     
         t = ""
-    
+        
         if inter==0:
             try:
                 for i in range(0, self.ntracks):
-    
+                
                     t = t + f.read(self.nsectors * self.sector_size)
-    
+            
             except IOError:
                 print 'Less than %i tracks found.' % self.ntracks
                 f.close()
                 raise ADFS_exception, \
                     'Less than %i tracks found.' % self.ntracks
-    
+        
         else:
-    
+        
             # Tracks are interleaved (0 80 1 81 2 82 ... 79 159) so rearrange
             # them into the form (0 1 2 3 ... 159)
-    
+            
             try:
+            
                 for i in range(0, self.ntracks):
-    
+                
                     if i < (self.ntracks >> 1):
                         f.seek(i*2*self.nsectors*self.sector_size, 0)
                         t = t + f.read(self.nsectors*self.sector_size)
@@ -568,12 +576,14 @@ class ADFSdisc:
                         j = i - (self.ntracks >> 1)
                         f.seek(((j*2)+1)*self.nsectors*self.sector_size, 0)
                         t = t + f.read(self.nsectors*self.sector_size)
+            
             except IOError:
+            
                 print 'Less than %i tracks found.' % self.ntracks
                 f.close()
                 raise ADFS_exception, \
                     'Less than %i tracks found.' % self.ntracks
-    
+        
         return t
     
     
@@ -581,22 +591,22 @@ class ADFSdisc:
     
         s = []
         try:
-    
+        
             for i in range(0, self.ntracks):
-    
+            
                 for j in range(0, self.nsectors):
-    
+                
                     s.append(adf.read(self.sector_size))
-    
+        
         except IOError:
-    
+        
             print 'Less than %i tracks x %i sectors found.' % \
                 (self.ntracks, self.nsectors)
             adf.close()
             raise ADFS_exception, \
                 'Less than %i tracks x %i sectors found.' % \
                 (self.ntracks, self.nsectors)
-    
+        
         return s
     
     
@@ -609,9 +619,10 @@ class ADFSdisc:
             lower = 32
         
         for i in s:
+        
             if ord(i) <= lower:
                 break
-    
+            
             if ord(i) >= 128:
                 c = ord(i)^128
                 if c > 32:
@@ -623,7 +634,7 @@ class ADFSdisc:
     
     
     def read_freespace(self):
-
+    
         # Currently unused
             
         base = 0
@@ -676,13 +687,13 @@ class ADFSdisc:
                 self.verify_log.append('Not a directory: %x' % head)
             
             return "", []
-    
+        
         p = p + 5
-    
+        
         files = []
-    
+        
         while ord(self.sectors[head+p]) != 0:
-    
+        
             old_name = self.sectors[head+p:head+p+10]
             top_set = 0
             counter = 1
@@ -690,13 +701,13 @@ class ADFSdisc:
                 if (ord(i) & 128) != 0:
                     top_set = counter
                 counter = counter + 1
-    
+            
             name = self.safe(self.sectors[head+p:head+p+10])
-    
+            
             load = self.str2num(4, self.sectors[head+p+10:head+p+14])
             exe = self.str2num(4, self.sectors[head+p+14:head+p+18])
             length = self.str2num(4, self.sectors[head+p+18:head+p+22])
-    
+            
             if self.disc_type == 'adD':
                 inddiscadd = 256 * self.str2num(
                     3, self.sectors[head+p+22:head+p+25]
@@ -705,9 +716,9 @@ class ADFSdisc:
                 inddiscadd = self.sector_size * self.str2num(
                     3, self.sectors[head+p+22:head+p+25]
                     )
-    
+            
             olddirobseq = self.str2num(1, self.sectors[head+p+25])
-    
+            
             #print string.expandtabs(
             #   "%s\t%s\t%s\t%s" % (
             #       name, "("+self.binary(8, olddirobseq)+")",
@@ -718,7 +729,7 @@ class ADFSdisc:
             #   "%s\t%02x\t%08x\t%08x" % (
             #       name, olddirobseq, load, exe
             #   ) )
-    
+            
             if self.disc_type == 'adD':
             
                 # Old format 800K discs.
@@ -738,6 +749,7 @@ class ADFSdisc:
                         [ name, self.sectors[inddiscadd:inddiscadd+length],
                           load, exe, length ]
                         )
+            
             else:
             
                 # Old format < 800K discs.
@@ -763,12 +775,12 @@ class ADFSdisc:
         
         
         # Go to tail of directory structure (0x200 -- 0x700)
-    
+        
         if self.disc_type == 'adD':
             tail = head + self.sector_size    # 1024 bytes
         else:
             tail = head + (self.sector_size*4)    # 1024 bytes
-    
+        
         dir_end = self.sectors[tail+self.sector_size-5:tail+self.sector_size-1]
         if dir_end != 'Hugo':
         
@@ -780,7 +792,7 @@ class ADFSdisc:
                     )
                         
             return '', files
-    
+        
         # Read the directory name, its parent and any title given.
         if self.disc_type == 'adD':
         
@@ -816,10 +828,10 @@ class ADFSdisc:
             
             # Note that the title may contain spaces.
             self.disc_name = self.safe(dir_title, with_space = 1)
-    
-    #    print "Directory title", dir_title
-    #    print "Directory name ", dir_name
-    
+        
+        #print "Directory title", dir_title
+        #print "Directory name ", dir_name
+        
         endseq = self.sectors[tail+self.sector_size-6]
         if endseq != dir_seq:
         
@@ -831,7 +843,7 @@ class ADFSdisc:
                     )
             
             return dir_name, files
-    
+        
         return dir_name, files
     
     
@@ -966,7 +978,7 @@ class ADFSdisc:
                     #print hex(head+p), hex(head+p+22)
             
             else:
-        
+            
                 if (newdiratts & 0x8) != 0:
                 
                     #print '%s -> %s' % (name, hex(inddiscadd))
@@ -1015,7 +1027,7 @@ class ADFSdisc:
                         remaining = remaining - amount
                     
                     files.append([name, file, load, exe, length])
-    
+            
             p = p + 26
         
         
@@ -1123,7 +1135,32 @@ class ADFSdisc:
                 self.print_catalogue(i[1], path + "." + name, filetypes)
     
     
-    def extract_old_files(self, l, path, filetypes = 0, separator = ","):
+    def convert_name(self, old_name, convert_dict):
+    
+        # Use the conversion dictionary to convert any forbidden
+        # characters to accepted local substitutes.
+        name = ""
+        
+        for c in old_name:
+        
+            if c in convert_dict.keys():
+            
+                name = name + convert_dict[c]
+            
+            else:
+            
+                name = name + c
+        
+        if self.verify and old_name != name:
+        
+            self.verify_log.append(
+                "Changed %s to %s" % (old_name, name)
+                )
+        
+        return name
+    
+    def extract_old_files(self, l, path, filetypes = 0, separator = ",",
+                          convert_dict = {}):
     
         new_path = self.create_directory(path)
         
@@ -1137,7 +1174,9 @@ class ADFSdisc:
         
         for i in l:
         
-            name = i[0]
+            old_name = i[0]
+            
+            name = self.convert_name(old_name, convert_dict)
             
             if type(i[1]) != type([]):
             
@@ -1184,10 +1223,13 @@ class ADFSdisc:
             
                 new_path = os.path.join(path, name)
                 
-                self.extract_old_files(i[1], new_path, filetypes)
+                self.extract_old_files(
+                    i[1], new_path, filetypes, separator, convert_dict
+                    )
     
     
-    def extract_new_files(self, l, path, filetypes = 0, separator = ","):
+    def extract_new_files(self, l, path, filetypes = 0, separator = ",",
+                          convert_dict = {}):
     
         new_path = self.create_directory(path)
         
@@ -1201,13 +1243,17 @@ class ADFSdisc:
         
         for i in l:
         
-            name = i[0]
+            old_name = i[0]
+            
+            # Use the conversion dictionary to convert any forbidden
+            # characters to accepted local substitutes.
+            name = self.convert_name(old_name, convert_dict)
             
             if type(i[1]) != type([]):
             
                 # A file.
                 load, exec_addr, length = i[2], i[3], i[4]
-    
+                
                 if filetypes == 0:
                 
                     # Load and execution addresses assumed to be valid.
@@ -1247,11 +1293,13 @@ class ADFSdisc:
             
                 new_path = os.path.join(path, name)
                 
-                self.extract_new_files(i[1], new_path, filetypes)
+                self.extract_new_files(
+                    i[1], new_path, filetypes, separator, convert_dict
+                    )
     
     
     def extract_files(self, out_path, files = None, filetypes = 0,
-                      separator = ","):
+                      separator = ",", convert_dict = {}):
     
         if files is None:
         
@@ -1259,19 +1307,27 @@ class ADFSdisc:
         
         if self.disc_type == 'adD':
         
-            self.extract_old_files(files, out_path, filetypes)
+            self.extract_old_files(
+                files, out_path, filetypes, separator, convert_dict
+                )
         
         elif self.disc_type == 'adE':
         
-            self.extract_new_files(files, out_path, filetypes)
+            self.extract_new_files(
+                files, out_path, filetypes, separator, convert_dict
+                )
         
         elif self.disc_type == 'adEbig':
         
-            self.extract_new_files(files, out_path, filetypes)
+            self.extract_new_files(
+                files, out_path, filetypes, separator, convert_dict
+                )
         
         else:
         
-            self.extract_old_files(files, out_path, filetypes)
+            self.extract_old_files(
+                files, out_path, filetypes, separator, convert_dict
+                )
     
     def create_directory(self, path, name = None):
     
@@ -1328,6 +1384,41 @@ class ADFSdisc:
         # Success
         return built
     
+    def plural(self, msg, values, words):
+    
+        """message = plural(self, msg, values, words)
+        
+        Return a message which takes into account the plural form of
+        words in the original message, assuming that the appropriate
+        form for negative numbers of items is the same as that for
+        more than one item.
+        
+        values is a list of numeric values referenced in the message.
+        words is a list of sequences of words to substitute into the
+        message. This takes the form
+        
+            [ word_to_use_for_zero_items,
+              word_to_use_for_one_item,
+              word_to_use_for_two_or_more_items ]
+        
+        The length of the values and words lists must be equal.
+        """
+        
+        substitutions = []
+        
+        for i in range(0, len(values)):
+        
+            n = values[i]
+            
+            # Each number must be mapped to a value in the range [0, 2].
+            if n > 1: n = 2
+            elif n < 0: n = 2
+            
+            substitutions.append(values[i])
+            substitutions.append(words[i][n])
+        
+        return msg % tuple(substitutions)
+    
     def print_log(self):
     
         """print_log()
@@ -1335,9 +1426,16 @@ class ADFSdisc:
         \rPrint the disc verification log.
         """
         
+        if hasattr(self, "disc_map") and self.disc_map.has_key(1):
+        
+            print self.plural(
+                "%i mapped %s found.", [len(self.disc_map[1])],
+                [("defects", "defect", "defects")]
+                )
+        
         if self.verify_log == []:
         
-            print "No problems found."
+            print "All objects located."
             return
         
         for line in self.verify_log:
