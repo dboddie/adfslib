@@ -145,34 +145,16 @@ if __name__ == "__main__":
         # Exit
         sys.exit()
     
-    # Attempt to create a directory using the output path in case the user
-    # wants to put the disc inside a directory to be sure that the disc won't
-    # overwrite files.
-    
-    try:
-        os.mkdir(out_path)
-        print 'Created directory: %s' % out_path
-    except OSError:
-        print "Couldn't create directory: %s" % out_path
-        sys.exit()
     
     # Make sure that the disc is put in a directory corresponding to the disc
     # name where applicable.
     
     if use_name != 0 and adfsdisc.disc_name != '$':
     
-        new_path = adfsdisc.create_directory(out_path, adfsdisc.disc_name)
+        new_path = os.path.join(out_path, adfsdisc.disc_name)
         
-        if new_path != "":
-        
-            print 'Created directory: %s' % new_path
-            
-            # Place the output files on this new path.
-            out_path = new_path
-        
-        else:
-        
-            print "Couldn't create directory: %s" % self.disc_name
+        # Place the output files on this new path.
+        out_path = new_path
     
     # Extract the files
     adfsdisc.extract_files(out_path, adfsdisc.files, filetypes, separator)
