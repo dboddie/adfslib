@@ -309,6 +309,10 @@ class ADFSdisc:
                 
                 # Set the next zone offset.
                 next_zone = next_zone + self.sector_size
+                
+                # Reset the current piece and starting offset.
+                current_piece = None
+                current_start = 0
             
             elif free_space != [] and a >= free_space[0][0]:
             
@@ -317,6 +321,10 @@ class ADFSdisc:
                 next = free_space[0][1]
                 
                 free_space.pop(0)
+                
+                # Reset the current piece and starting offset.
+                current_piece = None
+                current_start = 0
             
             elif current_piece is None and (next_zone - a) >= 2:
             
@@ -328,9 +336,14 @@ class ADFSdisc:
                 # the disc address and hence the file number.
                 # i.e.the top bit of the file number cannot be set.
                 
-                # Entry must be above 1 (defect)
-                if entry > 1:
+                if entry == 1:
                 
+                    # File number 1 (defect)
+                    next = a + 2
+                
+                elif entry > 1:
+                
+                    # Files or directories (greater than 1)
                     next = a + 2
                     
                     # Define a new entry.
@@ -340,27 +353,36 @@ class ADFSdisc:
                     
                         disc_map[entry] = []
                     
-                    # For the relevant entry, add the block to the list
-                    # of pieces found and implicitly finish reading this
-                    # fragment.
-                    
-                    disc_map[entry].append(
-                        [ self.find_address_from_map(a, begin, entry),
-                          self.find_address_from_map(next, begin, entry)
-                        ] )
-                    
                     if (value & 0x8000) == 0:
                     
                         # Record the file number and start of this fragment.
                         current_piece = entry
                         current_start = a
+                    
+                    else:
+                    
+                        # For an immediately terminated fragment, add the
+                        # extents of the block to the list of pieces found
+                        # and implicitly finish reading this fragment.
+                        
+                        start_addr = self.find_address_from_map(
+                            a, begin, entry
+                            )
+                        end_addr = self.find_address_from_map(
+                            next, begin, entry
+                            )
+                        
+                        if [start_addr, end_addr] not in disc_map[entry]:
+                        
+                            disc_map[entry].append( [start_addr, end_addr] )
                 
                 else:
                 
                     # Search for a valid file number.
+                    # Should probably stop looking in this zone.
                     next = a + 1
             
-            else:
+            elif current_piece is not None:
             
                 # In a piece being read.
                 
@@ -378,14 +400,18 @@ class ADFSdisc:
                     
                     # For relevant entries add the block to the list of
                     # pieces found.
-                    disc_map[current_piece].append(
-                        [ self.find_address_from_map(
-                              current_start, begin, current_piece
-                              ),
-                          self.find_address_from_map(
-                              next, begin, current_piece
-                              )
-                        ] )
+                    start_addr = self.find_address_from_map(
+                        current_start, begin, current_piece
+                        )
+                    end_addr = self.find_address_from_map(
+                        next, begin, current_piece
+                        )
+                    
+                    if [start_addr, end_addr] not in disc_map[current_piece]:
+                    
+                        disc_map[current_piece].append(
+                            [ start_addr, end_addr]
+                            )
                     
                     current_piece = None
                 
@@ -861,7 +887,8 @@ class ADFSdisc:
         
             if self.verify:
             
-                self.verify_log.append('Not a directory: %x' % head)
+                self.verify_log.append('Not a directory: %s' % hex(head))
+                print 'Not a directory: %s' % hex(head)
             
             return '', []
         
@@ -941,13 +968,18 @@ class ADFSdisc:
             else:
         
                 if (newdiratts & 0x8) != 0:
+                
                     #print '%s -> %s' % (name, hex(inddiscadd))
                     
                     # Remember that inddiscadd will be a sequence of
                     # pairs of addresses.
                     
-                    #print inddiscadd
+                    #print
                     #print hex(head+p+22),
+                    #print name, hex(load), hex(exe), hex(length)
+                    #print hex(ord(self.sectors[head+p+22])), \
+                    #        hex(ord(self.sectors[head+p+23])), \
+                    #        hex(ord(self.sectors[head+p+24]))
                     #print "addrs:", map(lambda x: map(hex, x), inddiscadd),
                     #print "atts:", hex(newdiratts)
                     
