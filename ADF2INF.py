@@ -222,12 +222,10 @@ if __name__ == "__main__":
     # Make sure that the disc is put in a directory corresponding to the disc
     # name where applicable.
     
-    if use_name != 0 and adfsdisc.disc_name != '$':
+    if use_name != 0:
     
-        new_path = os.path.join(out_path, adfsdisc.disc_name)
-        
         # Place the output files on this new path.
-        out_path = new_path
+        out_path = os.path.join(out_path, adfsdisc.disc_name)
     
     # Extract the files
     adfsdisc.extract_files(out_path, adfsdisc.files, filetypes, separator)
