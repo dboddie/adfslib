@@ -126,7 +126,7 @@ class ADFSdisc:
         elif self.disc_type == 'adE':
         
             # Read the disc name and map
-            self.disc_name = self.read_disc_info()
+            self.disc_name = self.safe(self.read_disc_info(), with_space = 1)
             
             # Find the root directory name and all the files and directories
             # contained within it
@@ -135,7 +135,7 @@ class ADFSdisc:
         elif self.disc_type == 'adEbig':
         
             # Read the disc name and map
-            self.disc_name = self.read_disc_info()
+            self.disc_name = self.safe(self.read_disc_info(), with_space = 1)
             
             # Find the root directory name and all the files and directories
             # contained within it
