@@ -9,16 +9,16 @@ try:
 
 except ImportError:
 
-    print "Apologies:"
+    print "Information:"
     print
-    print "You need the cmdsyntax module to be able to use the ADF2INF.py"
-    print "utility. You can still install the ADFSlib module if you want."
+    print "The cmdsyntax module is not installed. The ADF2INF.py utility"
+    print "will use getopt for its argument handling."
     print
     print "See http://www.boddie.org.uk/david/Projects/Python/CMDSyntax"
     print "for details of how to obtain the cmdsyntax module."
     print
     q = raw_input(
-        "Do you wish to continue installing the ADFSlib module? [yes]/no:"
+        "Do you wish to continue installing? [yes]/no:"
         )
     
     if q != "yes" and q != "":
@@ -32,7 +32,7 @@ setup(
     author="David Boddie",
     author_email="david@boddie.org.uk",
     url="http://www.boddie.org.uk/david/Projects/Python/ADF2INF",
-    version="0.10",
+    version="0.11",
     py_modules=["ADFSlib"],
     scripts=["ADF2INF.py"]
     )
