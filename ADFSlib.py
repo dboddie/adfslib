@@ -33,6 +33,11 @@ __version__ = "0.20"
 import os, string
 
 
+INFORM = 0
+WARNING = 1
+ERROR = 2
+
+
 class ADFS_exception(Exception):
 
     pass
@@ -42,6 +47,10 @@ class ADFSdisc:
 
     def __init__(self, adf, verify = 0):
     
+        # Log problems if the verify flag is set.
+        self.verify = verify
+        self.verify_log = []
+        
         # Check the properties using the length of the file
         adf.seek(0,2)
         length = adf.tell()
@@ -72,19 +81,21 @@ class ADFSdisc:
         
         elif length == 819200:
         
-            if self.identify_format(adf) == 'D':
-                self.ntracks = 80
-                self.nsectors = 10
-                self.sector_size = 1024
-                interleave = 0
+            self.ntracks = 80
+            self.nsectors = 10
+            self.sector_size = 1024
+            interleave = 0
+            
+            format = self.identify_format(adf)
+            
+            if format == 'D':
+            
                 self.disc_type = 'adD'
             
-            elif self.identify_format(adf) == 'E':
-                self.ntracks = 80
-                self.nsectors = 10
-                self.sector_size = 1024
-                interleave = 0
+            elif format == 'E':
+            
                 self.disc_type = 'adE'
+            
             else:
                 raise ADFS_exception, \
                     'Please supply a .adf, .adl or .adD file.'
@@ -112,10 +123,7 @@ class ADFSdisc:
         # Set the default disc name.
         self.disc_name = 'Untitled'
         
-        # Read the files on the disc, logging problems if the verify flag
-        # is set.
-        self.verify = verify
-        self.verify_log = []
+        # Read the files on the disc.
         
         if self.disc_type == 'adD':
         
@@ -181,6 +189,97 @@ class ADFSdisc:
     
     def identify_format(self, adf):
     
+        # Look for a valid disc record when determining whether the disc
+        # image represents an 800K D or E format floppy disc. First, the
+        # disc image needs to be read.
+        
+        # Read all the data in the image. This will be overwritten
+        # when the image is read properly.
+        self.sectors = adf.read()
+        
+        # This will be done again for E format and later discs.
+        
+        record = self.read_disc_record(4)
+        
+        # Define a checklist of criteria to satisfy.
+        checklist = \
+        {
+            "Length field matches image length": 0,
+            "Expected sector size (1024 bytes)": 0,
+            "Expected density (double)": 0,
+            "Root directory at location given": 0
+        }
+        
+        # Check the disc image length.
+        
+        # Seek to the end of the disc image.
+        adf.seek(0, 2)
+        
+        #print hex(record["disc size"]), hex(adf.tell())
+        
+        if record["disc size"] == adf.tell():
+        
+            # The record (if is exists) does not provide a consistent value
+            # for the length of the image file.
+            checklist["Length field matches image length"] = 1
+        
+        
+        # Check the sector size of the disc.
+        
+        #print hex(record["sector size"])
+        
+        if record["sector size"] == 1024:
+        
+            # These should be equal if the disc record is valid.
+            checklist["Expected sector size (1024 bytes)"] = 1
+        
+        
+        # Check the density of the disc.
+        
+        #print record["density"]
+        
+        if record["density"] == "double":
+        
+            # This should be a double density disc if the disc record is valid.
+            checklist["Expected density (double)"] = 1
+        
+        
+        # Check the data at the root directory location.
+        #print hex(record["root dir"])
+        
+        adf.seek((record["root dir"] * record["sector size"]) + 1, 0)
+        word = adf.read(4)
+        
+        if word == "Hugo" or word == "Nick":
+        
+            # A valid directory identifier was found.
+            checklist["Root directory at location given"] = 1
+        
+        
+        if self.verify:
+        
+            self.verify_log.append(
+                (INFORM, "Checklist for E format discs:")
+                )
+            
+            for key, value in checklist.items():
+            
+                self.verify_log.append(
+                    (INFORM, "%s: %s" % (key, ["no", "yes"][value]))
+                    )
+        
+        # If all the tests pass then the disc is an E format disc.
+        if reduce(lambda a, b: a + b, checklist.values(), 0) == \
+            len(checklist.keys()):
+        
+            if self.verify: self.verify_log.append((INFORM, "E format disc"))
+            return "E"
+        
+        # Since there may not be a valid disc record for earlier discs
+        # then anything other than full marks can be interpreted as
+        # an indication that the disc is a D format disc. However, we
+        # can perform a final test to check this.
+        
         # Simple test for D and E formats: look for Hugo at 0x401 for D format
         # and Nick at 0x801 for E format
         adf.seek(0x401)
@@ -190,32 +289,76 @@ class ADFSdisc:
         adf.seek(0)
         
         if word1 == 'Hugo':
+        
+            if self.verify:
+            
+                self.verify_log.append(
+                    ( INFORM,
+                      "Found directory in typical place for the root " + \
+                      "directory of a D format disc." )
+                    )
+            
             return 'D'
+        
         elif word2 == 'Nick':
+        
+            if self.verify:
+            
+                self.verify_log.append(
+                    ( INFORM,
+                      "Found directory in typical place for the root " + \
+                      "directory of an E format disc." )
+                    )
+            
             return 'E'
+        
         else:
+        
+            if self.verify:
+            
+                self.verify_log.append(
+                    ( ERROR,
+                      "Failed to find any information which would help " + \
+                      "determine the disc format." )
+                    )
+            
             return '?'
     
     
     def read_disc_record(self, offset):
     
         # Total sectors per track (sectors * heads)
-        sector_size = ord(self.sectors[offset])
+        log2_sector_size = ord(self.sectors[offset])
         # Sectors per track
         nsectors = ord(self.sectors[offset + 1])
         # Heads per track
         heads = ord(self.sectors[offset + 2])
         
-        type = ord(self.sectors[offset+3])
-        if type == 1:
+        density = ord(self.sectors[offset+3])
+        
+        if density == 1:
+        
             density = 'single'        # Single density disc
-        elif type == 2:
+            sector_size = 256
+        
+        elif density == 2:
+        
             density = 'double'        # Double density disc
-        elif type == 3:
+            sector_size = 512
+        
+        elif density == 3:
+        
             density = 'quad'        # Quad density disc
+            sector_size = 1024
+        
         else:
+        
             density = 'unknown'
         
+        # Length of ID fields in the disc map
+        idlen = self.str2num(1, self.sectors[offset + 4])
+        # Number of bytes per map bit.
+        bytes_per_bit = 2 ** self.str2num(1, self.sectors[offset + 5])
         # LowSector
         # StartUp
         # LinkBits
@@ -225,10 +368,10 @@ class ADFSdisc:
         # RASkew
         # BootOpt
         # Zones
-        zones = ord(self.sectors[offset + 10])
+        zones = ord(self.sectors[offset + 9])
         # ZoneSpare
         # RootDir
-        root = self.sectors[offset + 12 : offset + 15]
+        root = self.str2num(3, self.sectors[offset + 13 : offset + 16]) # was 15
         # Identify
         # SequenceSides
         # DoubleStep
@@ -239,9 +382,11 @@ class ADFSdisc:
         # DiscName
         disc_name = string.strip(self.sectors[offset + 22 : offset + 32])
         
-        return {'sectors': nsectors, 'heads': heads, 'density': density,
+        return {'sectors': nsectors, 'log2 sector size': log2_sector_size,
+            'sector size': 2**log2_sector_size, 'heads': heads,
+            'density': density,
             'disc size': disc_size, 'disc ID': disc_id,
-            'disc name': disc_name, 'zones': zones, 'root': root}
+            'disc name': disc_name, 'zones': zones, 'root dir': root }
     
     
     def read_disc_info(self):
@@ -252,6 +397,9 @@ class ADFSdisc:
         if self.disc_type == 'adE':
         
             self.record = self.read_disc_record(4)
+            
+            self.sector_size = self.record["sector size"]
+            
             self.map_header = 0
             self.map_start, self.map_end = 0x40, 0x400
             self.free_space = self.read_free_space(
@@ -266,6 +414,9 @@ class ADFSdisc:
         if self.disc_type == 'adEbig':
         
             self.record = self.read_disc_record(0xc6804)
+            
+            self.sector_size = self.record["sector size"]
+            
             self.map_header = 0xc6800
             self.map_start, self.map_end = 0xc6840, 0xc7800
             self.free_space = self.read_free_space(
@@ -548,6 +699,8 @@ class ADFSdisc:
     
         t = ""
         
+        f.seek(0, 0)
+        
         if inter==0:
             try:
                 for i in range(0, self.ntracks):
@@ -684,7 +837,9 @@ class ADFSdisc:
         
             if self.verify:
             
-                self.verify_log.append('Not a directory: %x' % head)
+                self.verify_log.append(
+                    (WARNING, 'Not a directory: %x' % head)
+                    )
             
             return "", []
         
@@ -787,8 +942,9 @@ class ADFSdisc:
             if self.verify:
             
                 self.verify_log.append(
-                    'Discrepancy in directory structure: [%x, %x] ' % \
-                        ( head, tail )
+                    ( WARNING,
+                      'Discrepancy in directory structure: [%x, %x] ' % \
+                      ( head, tail ) )
                     )
                         
             return '', files
@@ -838,8 +994,9 @@ class ADFSdisc:
             if self.verify:
             
                 self.verify_log.append(
-                    'Broken directory: %s at [%x, %x]' % \
-                        (dir_title, head, tail)
+                    ( WARNING,
+                      'Broken directory: %s at [%x, %x]' % \
+                      (dir_title, head, tail) )
                     )
             
             return dir_name, files
@@ -899,8 +1056,10 @@ class ADFSdisc:
         
             if self.verify:
             
-                self.verify_log.append('Not a directory: %s' % hex(head))
-                print 'Not a directory: %s' % hex(head)
+                self.verify_log.append(
+                    (WARNING, 'Not a directory: %s' % hex(head))
+                    )
+                #print 'Not a directory: %s' % hex(head)
             
             return '', []
         
@@ -942,32 +1101,37 @@ class ADFSdisc:
                     if self.verify:
                     
                         self.verify_log.append(
-                            "Couldn't find directory: %s" % name
+                            (WARNING, "Couldn't find directory: %s" % name)
                             )
                         self.verify_log.append(
-                            "    at: %x" % (head+p+22)
+                            (WARNING, "    at: %x" % (head+p+22))
                             )
-                        self.verify_log.append(
-                            "    file details: %x" % \
+                        self.verify_log.append( (
+                            WARNING, "    file details: %x" % \
                             self.str2num(3, self.sectors[head+p+22:head+p+25])
+                            ) )
+                        self.verify_log.append(
+                            (WARNING, "    atts: %x" % newdiratts)
                             )
-                        self.verify_log.append("    atts: %x" % newdiratts)
                 
                 elif length != 0:
                 
                     if self.verify:
                     
                         self.verify_log.append(
-                            "Couldn't find file: %s" % name
+                            (WARNING, "Couldn't find file: %s" % name)
                             )
                         self.verify_log.append(
-                            "    at: %x" % (head+p+22)
+                            (WARNING, "    at: %x" % (head+p+22))
                             )
-                        self.verify_log.append(
+                        self.verify_log.append( (
+                            WARNING,
                             "    file details: %x" % \
                             self.str2num(3, self.sectors[head+p+22:head+p+25])
+                            ) )
+                        self.verify_log.append(
+                            (WARNING, "    atts: %x" % newdiratts)
                             )
-                        self.verify_log.append("    atts: %x" % newdiratts)
                 
                 else:
                 
@@ -1042,8 +1206,9 @@ class ADFSdisc:
             if self.verify:
             
                 self.verify_log.append(
-                    'Discrepancy in directory structure: [%x, %x]' % \
-                        ( head, tail )
+                    ( WARNING,
+                      'Discrepancy in directory structure: [%x, %x]' % \
+                      ( head, tail ) )
                     )
             
             return '', files
@@ -1078,8 +1243,9 @@ class ADFSdisc:
             if self.verify:
             
                 self.verify_log.append(
-                    'Broken directory: %s at [%x, %x]' % \
-                        (dir_title, head, tail)
+                    ( WARNING,
+                      'Broken directory: %s at [%x, %x]' % \
+                      (dir_title, head, tail) )
                     )
             
             return dir_name, files
@@ -1105,6 +1271,10 @@ class ADFSdisc:
         if files is None:
         
             files = self.files
+        
+        if files == []:
+        
+            print path, "(empty)"
         
         for i in files:
     
@@ -1132,6 +1302,7 @@ class ADFSdisc:
                         )
             
             else:
+            
                 self.print_catalogue(i[1], path + "." + name, filetypes)
     
     
@@ -1154,7 +1325,8 @@ class ADFSdisc:
         if self.verify and old_name != name:
         
             self.verify_log.append(
-                "Changed %s to %s" % (old_name, name)
+                ( WARNING,
+                  "Changed %s to %s" % (old_name, name) )
                 )
         
         return name
@@ -1419,11 +1591,12 @@ class ADFSdisc:
         
         return msg % tuple(substitutions)
     
-    def print_log(self):
+    def print_log(self, verbose = 0):
     
-        """print_log()
+        """print_log(self, verbose = 0)
         \r
-        \rPrint the disc verification log.
+        \rPrint the disc verification log. Any purely informational messages
+        \rare only printed is verbose is set to 1.
         """
         
         if hasattr(self, "disc_map") and self.disc_map.has_key(1):
@@ -1433,12 +1606,23 @@ class ADFSdisc:
                 [("defects", "defect", "defects")]
                 )
         
-        if self.verify_log == []:
+        # Count the information, warning and error messages in the log.
+        informs = reduce(lambda a, b: a + (b[0] == INFORM), self.verify_log, 0)
+        warnings = reduce(
+            lambda a, b: a + (b[0] == WARNING), self.verify_log, 0
+            )
+        errors = reduce(lambda a, b: a + (b[0] == ERROR), self.verify_log, 0)
+        
+        if (warnings + errors) == 0:
         
             print "All objects located."
-            return
+            if not verbose: return
         
-        for line in self.verify_log:
+        if self.verify_log != []:
+        
+            print
+        
+        for msgtype, line in self.verify_log:
         
             print line
 
