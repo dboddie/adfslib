@@ -3,7 +3,7 @@
     Name        : ADF2INF.py
     Author      : David Boddie
     Created     : Wed 18th October 2000
-    Updated     : Sun 23rd March 2003
+    Updated     : Mon 24th March 2003
     Purpose     : Convert ADFS disc images (ADF) to INF files
     WWW         : http://david.boddie.org.uk/Projects/Emulation/T2Tools
 """
@@ -812,8 +812,16 @@ def extract_new_files(l, path):
 import os, string, sys
 import cmdsyntax
 
-syntax = "(-l [-t] <ADF file>) | ([-d] [-t [-s separator]] <ADF file> <destination path>)"
-version = "0.22c (Sun 23rd March 2003)"
+syntax = """
+(
+    [-l | --list] [-t | --file-types] <ADF file>
+) |
+(
+    [-d | --create-directory]
+    [(-t | --file-types) [(-s separator) | --separator=character]]
+    <ADF file> <destination path>
+)"""
+version = "0.30c (Mon 24th March 2003)"
 __version__ = version
 
 syntax_obj = cmdsyntax.Syntax(syntax)
@@ -854,10 +862,10 @@ if match == {}:
 # Determine whether the file is to be listed
 
 
-listing = match.has_key("l")
-use_name = match.has_key("d")
-filetypes = match.has_key("t")
-use_separator = match.has_key("s")
+listing = match.has_key("l") or match.has_key("list")
+use_name = match.has_key("d") or match.has_key("create-directory")
+filetypes = match.has_key("t") or match.has_key("file-types")
+use_separator = match.has_key("s") or match.has_key("separator")
 
 adf_file = match["ADF file"]
 
