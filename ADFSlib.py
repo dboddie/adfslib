@@ -382,7 +382,7 @@ class ADFSdisc:
                     # Check whether this block finishes immediately.
                     if (value & 0x8000) != 0:
                     
-                        print " immediate end at", hex(a)
+                        #print " immediate end at", hex(a)
                         
                         map[entry][-1].append(a + 2)
                         
@@ -927,7 +927,7 @@ class ADFSdisc:
         # addresses.
         pieces = self.find_in_new_map(self.map_start, self.map_end, file_no)
         
-        print map(lambda x: map(hex, x), pieces)
+        #print map(lambda x: map(hex, x), pieces)
         
         if pieces == []:
         
