@@ -3,7 +3,7 @@
 Name        : ADF2INF.py
 Author      : David Boddie
 Created     : Wed 18th October 2000
-Updated     : Sat 19th July 2003
+Updated     : Mon 21st July 2003
 Purpose     : Convert ADFS disc images (ADF) to INF files
 WWW         : http://david.boddie.org.uk/Projects/Python/ADFSlib
 
@@ -45,7 +45,7 @@ except ImportError:
     use_getopt = 1
 
 
-__version__ = "0.35c (Sun 20th July 2003)"
+__version__ = "0.36c (Mon 21st July 2003)"
 
 default_convert_dict = {"/": "."}
 
