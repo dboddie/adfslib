@@ -167,20 +167,24 @@ def read_disc_record(offset):
 
 def read_disc_info(disc_type):
 
+    global map_start, map_end
+    
     checksum = ord(sectors[0])
     first_free = str2num(2, sectors[1:3])
 
     if disc_type == 'adE':
 
         record = read_disc_record(4)
-        map = read_new_map(disc_type, 0x40, 0x400)
+        map_start, map_end = 0x40, 0x400
+        map = read_new_map(disc_type, map_start, map_end)
         
         return record['disc name'], map
 
     if disc_type == 'adEbig':
 
         record = read_disc_record(0xc6804)
-        map = read_new_map(disc_type, 0xc6840, 0xc7800)
+        map_start, map_end = 0xc6840, 0xc7800
+        map = read_new_map(disc_type, map_start, map_end)
 
         return record['disc name'], map
 
@@ -207,9 +211,9 @@ def read_new_map(disc_type, begin, end):
         next = a + 1
         
         # Entry must be above 1 (defect)
-        if (entry & 0x00ff) > 1:
+        if current is None:
         
-            if current is None:
+            if (entry & 0x00ff) > 1 and (entry & 0x00ff) != 0xff:
             
                 # Define a new entry.
                 current = entry & 0x7fff
@@ -239,9 +243,98 @@ def read_new_map(disc_type, begin, end):
                 # with this file number.
                 map[current].append( [address] )
             
-            next = a + 2
+            next = a + 1
         
-        if (entry & 0x8000) != 0 and current is not None:
+        if (entry & 0x8000) != 0:
+        
+            if current is not None:
+            
+                if disc_type == 'adE':
+                
+                    address = ((a + 2 - begin) * sector_size)
+                
+                elif disc_type == 'adEbig':
+                
+                    upper = (entry & 0x7f00) >> 8
+                    
+                    if upper > 1:
+                        upper = upper - 1
+                    if upper > 3:
+                        upper = 3
+                    
+                    address = ((a + 2 - begin) - (upper * 0xc8)) * 0x200
+                
+                # This is the end of the current entry. Modify the latest
+                # address to indicate a range of addresses.
+                #print "End:", hex(current), hex(a)
+                map[current][-1].append(address)
+                
+                # Unset the current file number.
+                current = None
+            
+            next = a + 2
+            
+            # Move past the ending bit to an evenly aligned byte.
+            #if next % 2 != 0:
+            #
+            #    next = next + 1
+        
+        a = next
+    
+    #for k, v in map.items():
+    #
+    #    print hex(k), __builtins__.map(lambda x: __builtins__.map(hex, x), v)
+    
+    return map
+
+
+def find_in_new_map(disc_type, begin, end, file_no):
+
+    if file_no < 2:
+    
+        return []
+    
+    a = begin
+    
+    pieces = []
+    
+    in_piece = 0
+    
+    while a < end:
+    
+        entry = str2num(2, sectors[a:a+2])
+        
+        # The next entry to be read will occur one byte after this one
+        # unless one of the following checks override this behaviour.
+        next = a + 1
+        
+        if (entry & 0x7fff) == file_no:
+        
+            if disc_type == 'adE':
+            
+                address = ((a - begin) * sector_size)
+            
+            elif disc_type == 'adEbig':
+            
+                upper = (entry & 0x7f00) >> 8
+                
+                if upper > 1:
+                    upper = upper - 1
+                if upper > 3:
+                    upper = 3
+                
+                address = ((a - begin) - (upper * 0xc8)) * 0x200
+            
+            # Add a list containing the start address of the
+            # file/directory to the list of objects associated
+            # with this file number.
+            pieces.append( [address] )
+            
+            in_piece = 1
+            
+            next = a + 1
+        
+        if in_piece == 1 and (entry & 0x8000) != 0:
         
             if disc_type == 'adE':
             
@@ -260,26 +353,15 @@ def read_new_map(disc_type, begin, end):
             
             # This is the end of the current entry. Modify the latest
             # address to indicate a range of addresses.
-            #print "End:", hex(current), hex(a)
-            map[current][-1].append(address)
+            pieces[-1].append(address)
             
-            # Unset the current file number.
-            current = None
+            in_piece = 0
             
-            # Move past the ending bit to an evenly aligned byte.
             next = a + 2
-            
-            if next % 2 != 0:
-            
-                next = next + 1
         
         a = next
     
-    #for k, v in map.items():
-    #
-    #    print hex(k), __builtins__.map(lambda x: __builtins__.map(hex, x), v)
-    
-    return map
+    return pieces
 
 
 def read_tracks(f, inter):
@@ -514,14 +596,11 @@ def read_new_address(s, dir = 0):
     #print "File number:", hex(file_no)
     
     # The pieces of the object are returned as a list of pairs of addresses.
-    try:
+    pieces = find_in_new_map(disc_type, map_start, map_end, file_no)
     
-        pieces = disc_map[file_no]
-    
-    except KeyError:
+    if pieces == []:
     
         return -1
-    
     
     # Ensure that the first piece of data is read from the appropriate
     # point in the relevant sector.
@@ -808,11 +887,43 @@ def extract_new_files(l, path):
                     print "Couldn't open the file, %s" % out_file
         else:
             if name != '$':
+            
+                elements = list(os.path.split(path)) + [name]
+                
+                # Remove any empty list elements.
+                elements = filter(lambda x: x != '', elements)
+                
                 try:
-                    os.mkdir(path + os.sep + name)
-                    print 'Created directory '+path + os.sep + name
-                except IOError:
-                    print 'Directory '+read_leafname(path + os.sep + name)+" already exists."
+                
+                    built = ""
+                    
+                    for element in elements:
+                    
+                        built = os.path.join(built, element)
+                        
+                        if not os.path.exists(built):
+                        
+                            # This element of the directory does not exist.
+                            # Create a directory here.
+                            os.mkdir(built)
+                            print 'Created directory:', built
+                        
+                        elif not os.path.isdir(built):
+                        
+                            # This element of the directory already exists
+                            # but is not a directory.
+                            print 'A file exists which prevents a ' + \
+                                'directory from being created: %s' % \
+                                os.path.join(elements)
+                            
+                            return
+                
+                except OSError:
+                
+                    print 'Directory could not be created: %s' % \
+                        os.path.join(elements)
+                    
+                    return
 
                 extract_new_files(i[1], path + os.sep + name)
             else:
@@ -1021,9 +1132,9 @@ if listing != 0:
 
 try:
     os.mkdir(out_path)
-    print 'Created directory '+out_path
-except IOError:
-    print "Couldn't create directory "+read_leafname(out_path)+'.'
+    print 'Created directory: %s' % out_path
+except OSError:
+    print "Couldn't create directory: %s" % out_path
     sys.exit()
 
 # Make sure that the disc is put in a directory corresponding to the disc name
