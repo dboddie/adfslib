@@ -367,8 +367,19 @@ class ADFSdisc:
                 
                     # Add this address to the map dictionary.
                     map[entry].append(a)
+                
+                # Store the value of the lowest byte to indicate that a block
+                # of data is being read.
+                previous = value & 0xff
             
-            previous = value & 0xff
+            else:
+            
+                # Store the previous byte only if it is represents data in
+                # the map (either beginning or ending).
+                if (entry & 0xff) > 1:
+                
+                    previous = value & 0xff
+            
             a = next
         
         return map
@@ -801,21 +812,32 @@ class ADFSdisc:
             exe = self.str2num(4, self.sectors[head+p+14:head+p+18])
             length = self.str2num(4, self.sectors[head+p+18:head+p+22])
     
-            inddiscadd = self.read_new_address(self.sectors[head+p+22:head+p+25])
+            inddiscadd = self.read_new_address(
+                self.sectors[head+p+22:head+p+25]
+                )
             newdiratts = self.str2num(1, self.sectors[head+p+25])
-            
-            #print hex(head+p+22),
-            #print "addrs:", map(lambda x: map(hex, x), inddiscadd),
-            #print "atts:", hex(newdiratts)
             
             if inddiscadd == -1:
     
                 if (newdiratts & 0x8) != 0:
+                
                     print "Couldn't"+' find directory, "%s"' % name
+                    
+                    print "at:", hex(head+p+22),
+                    print "file details:", hex(
+                        self.str2num(3, self.sectors[head+p+22:head+p+25])
+                        ),
+                    print "atts:", hex(newdiratts)
                 
                 elif length != 0:
                 
                     print "Couldn't"+' find file, "%s"' % name
+                    
+                    print "at:", hex(head+p+22),
+                    print "file details:", hex(
+                        self.str2num(3, self.sectors[head+p+22:head+p+25])
+                        ),
+                    print "atts:", hex(newdiratts)
                 
                 else:
                 
@@ -834,6 +856,9 @@ class ADFSdisc:
                     # pairs of addresses.
                     
                     #print inddiscadd
+                    #print hex(head+p+22),
+                    #print "addrs:", map(lambda x: map(hex, x), inddiscadd),
+                    #print "atts:", hex(newdiratts)
                     
                     for start, end in inddiscadd:
                     
