@@ -236,13 +236,27 @@ if __name__ == "__main__":
     
     if listing == 0 and verify == 0:
     
-        # Create an ADFSdisc instance using this file.
-        adfsdisc = ADFSlib.ADFSdisc(adf)
+        try:
+        
+            # Create an ADFSdisc instance using this file.
+            adfsdisc = ADFSlib.ADFSdisc(adf)
+        
+        except ADFSlib.ADFS_exception:
+        
+            print "Unrecognised disc image: %s" % adf_file
+            sys.exit()
     
     elif listing != 0:
     
-        # Create an ADFSdisc instance using this file.
-        adfsdisc = ADFSlib.ADFSdisc(adf, verify = 1)
+        try:
+        
+            # Create an ADFSdisc instance using this file.
+            adfsdisc = ADFSlib.ADFSdisc(adf, verify = 1)
+        
+        except ADFSlib.ADFS_exception:
+        
+            print "Unrecognised disc image: %s" % adf_file
+            sys.exit()
     
     else:
     
@@ -251,10 +265,17 @@ if __name__ == "__main__":
         print "Verifying..."
         print
         
-        # Create an ADFSdisc instance using this file.
-        adfsdisc = ADFSlib.ADFSdisc(adf, verify = 1)
+        try:
         
-        adfsdisc.print_log()
+            # Create an ADFSdisc instance using this file.
+            adfsdisc = ADFSlib.ADFSdisc(adf, verify = 1)
+        
+        except ADFSlib.ADFS_exception:
+        
+            print "Unrecognised disc image: %s" % adf_file
+            sys.exit()
+        
+        adfsdisc.print_log(verbose = 1)
         
         # Exit
         sys.exit()
