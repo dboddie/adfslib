@@ -1272,7 +1272,7 @@ if __name__ == "__main__":
             print "Couldn't create directory: %s" % self.disc_name
     
     # Extract the files
-    adfsdisc.extract_files(adfsdisc.files, out_path)
+    adfsdisc.extract_files(out_path, adfsdisc.files)
     
     # Exit
     sys.exit()
