@@ -1143,7 +1143,7 @@ if __name__ == "__main__":
     
     syntax = """
     (
-        [-l | --list] [-t | --file-types] <ADF file>
+        (-l | --list) [-t | --file-types] <ADF file>
     ) |
     (
         [-d | --create-directory]
