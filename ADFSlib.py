@@ -1079,6 +1079,7 @@ class ADFSdisc:
                     except IOError:
                         print "Couldn't open the file, %s" % out_file
             else:
+            
                 if name != '$':
                 
                     new_path = self.create_directory(path, name)
@@ -1137,6 +1138,7 @@ class ADFSdisc:
                     except IOError:
                         print "Couldn't open the file, %s" % out_file
             else:
+            
                 if name != '$':
                 
                     new_path = self.create_directory(path, name)
@@ -1198,15 +1200,14 @@ class ADFSdisc:
                     # This element of the directory already exists
                     # but is not a directory.
                     print 'A file exists which prevents a ' + \
-                        'directory from being created: %s' % \
-                        os.path.join(elements)
+                        'directory from being created: %s' % built
                     
                     return ""
         
         except OSError:
         
             print 'Directory could not be created: %s' % \
-                os.path.join(elements)
+                string.join(elements, os.sep)
             
             return ""
         
