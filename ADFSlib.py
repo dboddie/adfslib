@@ -953,7 +953,7 @@ class ADFSdisc:
             return path
     
     
-    def print_catalogue(self, files = None, path = "$"):
+    def print_catalogue(self, files = None, path = "$", filetypes = 0):
     
         if files is None:
         
@@ -985,10 +985,10 @@ class ADFSdisc:
                         )
             
             else:
-                self.print_catalogue(i[1], path + "." + name)
+                self.print_catalogue(i[1], path + "." + name, filetypes)
     
     
-    def extract_old_files(self, l, path):
+    def extract_old_files(self, l, path, filetypes = 0):
     
         for i in l:
         
@@ -1041,13 +1041,13 @@ class ADFSdisc:
                     
                     if new_path != "":
                     
-                        self.extract_old_files(i[1], new_path)
+                        self.extract_old_files(i[1], new_path, filetypes)
                     
                 else:
-                    self.extract_old_files(i[1], path)
+                    self.extract_old_files(i[1], path, filetypes)
     
     
-    def extract_new_files(self, l, path):
+    def extract_new_files(self, l, path, filetypes = 0):
     
         for i in l:
         
@@ -1099,12 +1099,12 @@ class ADFSdisc:
                     
                     if new_path != "":
                     
-                        self.extract_new_files(i[1], new_path)
+                        self.extract_new_files(i[1], new_path, filetypes)
                     
                 else:
-                    self.extract_new_files(i[1], path)
+                    self.extract_new_files(i[1], path, filetypes)
     
-    def extract_files(self, out_path, files = None):
+    def extract_files(self, out_path, files = None, filetypes = 0):
     
         if files is None:
         
@@ -1112,19 +1112,19 @@ class ADFSdisc:
         
         if self.disc_type == 'adD':
         
-            self.extract_old_files(files, out_path)
+            self.extract_old_files(files, out_path, filetypes)
         
         elif self.disc_type == 'adE':
         
-            self.extract_new_files(files, out_path)
+            self.extract_new_files(files, out_path, filetypes)
         
         elif self.disc_type == 'adEbig':
         
-            self.extract_new_files(files, out_path)
+            self.extract_new_files(files, out_path, filetypes)
         
         else:
         
-            self.extract_old_files(files, out_path)
+            self.extract_old_files(files, out_path, filetypes)
     
     def create_directory(self, path, name):
     

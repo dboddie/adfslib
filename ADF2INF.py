@@ -113,7 +113,7 @@ if __name__ == "__main__":
         print 'Contents of', adfsdisc.disc_name,':'
         print
     
-        adfsdisc.print_catalogue(adfsdisc.files, adfsdisc.root_name)
+        adfsdisc.print_catalogue(adfsdisc.files, adfsdisc.root_name, filetypes)
     
         # Exit
         sys.exit()
@@ -149,7 +149,7 @@ if __name__ == "__main__":
             print "Couldn't create directory: %s" % self.disc_name
     
     # Extract the files
-    adfsdisc.extract_files(out_path, adfsdisc.files)
+    adfsdisc.extract_files(out_path, adfsdisc.files, filetypes)
     
     # Exit
     sys.exit()
