@@ -551,11 +551,16 @@ class ADFSdisc:
         return s
     
     
-    def safe(self, s):
+    def safe(self, s, with_space = 0):
     
         new = ""
+        if with_space == 1:
+            lower = 31
+        else:
+            lower = 32
+        
         for i in s:
-            if ord(i) <= 32:
+            if ord(i) <= lower:
                 break
     
             if ord(i) >= 128:
@@ -564,7 +569,7 @@ class ADFSdisc:
                     new = new + chr(c)
             else:
                 new = new + i
-    
+        
         return new
     
     
@@ -757,7 +762,11 @@ class ADFSdisc:
                 )
         
         if parent == head:
-            self.disc_name = dir_title
+        
+            # Use the directory title as the disc name.
+            
+            # Note that the title may contain spaces.
+            self.disc_name = self.safe(dir_title, with_space = 1)
     
     #    print "Directory title", dir_title
     #    print "Directory name ", dir_name
