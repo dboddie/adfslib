@@ -106,7 +106,7 @@ class ADFSdisc:
         elif self.disc_type == 'adE':
         
             # Read the disc name and map
-            self.disc_name, self.disc_map = self.read_disc_info()
+            self.disc_name = self.read_disc_info()
         
             # Find the root directory name and all the files and directories
             # contained within it
@@ -115,7 +115,7 @@ class ADFSdisc:
         elif self.disc_type == 'adEbig':
         
             # Read the disc name and map
-            self.disc_name, self.disc_map = self.read_disc_info()
+            self.disc_name = self.read_disc_info()
         
             # Find the root directory name and all the files and directories
             # contained within it
@@ -232,18 +232,18 @@ class ADFSdisc:
             self.record = self.read_disc_record(4)
             self.map_start, self.map_end = 0x40, 0x400
             #map = self.read_new_map(map_start, map_end)
-            map = self.scan_new_map(self.map_start, self.map_end)
+            #map = self.scan_new_map(self.map_start, self.map_end)
             
-            return self.record['disc name'], map
+            return self.record['disc name'] #, map
     
         if self.disc_type == 'adEbig':
     
             self.record = self.read_disc_record(0xc6804)
             self.map_start, self.map_end = 0xc6840, 0xc7800
             #map = self.read_new_map(map_start, map_end)
-            map = self.scan_new_map(self.map_start, self.map_end)
+            #map = self.scan_new_map(self.map_start, self.map_end)
     
-            return self.record['disc name'], map
+            return self.record['disc name'] #, map
     
         else:
             return 'Unknown'
@@ -343,12 +343,6 @@ class ADFSdisc:
         #    print hex(k), \
         #       __builtins__.map(lambda x: __builtins__.map(hex, x), v)
         
-        return map
-    
-    
-    def scan_new_map(self, begin, end):
-    
-        map = {}
         return map
     
     
