@@ -3,7 +3,8 @@ ADFSlib and ADF2INF
 This is a snapshot of my ADFS floppy disc reading library and its associated
 utility.
 
-The ADF2INF utility requires the cmdsyntax module. See
+The ADF2INF utility will take advantage of the cmdsyntax module if
+available. See
 
     http://www.boddie.org.uk/david/Projects/Python/CMDSyntax
 
