@@ -3,7 +3,7 @@
 Name        : ADF2INF.py
 Author      : David Boddie
 Created     : Wed 18th October 2000
-Updated     : Tue 15th April 2003
+Updated     : Sat 19th July 2003
 Purpose     : Convert ADFS disc images (ADF) to INF files
 WWW         : http://david.boddie.org.uk/Projects/Python/ADFSlib
 
@@ -31,7 +31,7 @@ DEALINGS IN THE SOFTWARE.
 """
 
 
-import os, sys
+import os, string, sys
 import ADFSlib
 
 try:
@@ -45,7 +45,9 @@ except ImportError:
     use_getopt = 1
 
 
-__version__ = "0.33c (Wed 2nd July 2003)"
+__version__ = "0.34c (Sat 19th July 2003)"
+
+default_convert_dict = {"/": "."}
 
 
 def read_cmdsyntax_input(argv, syntax):
@@ -74,12 +76,12 @@ def read_cmdsyntax_input(argv, syntax):
 
 def read_getopt_input(argv):
 
-    opts, args = getopt.getopt(argv[1:], "ldts:v")
-
+    opts, args = getopt.getopt(argv[1:], "ldts:c:vh")
+    
     match = {}
     
-    opt_dict = {"-l": "list", "-d": "directory", "-t": "file-types", "-s": "separator",
-                "-v": "verify"}
+    opt_dict = {"-l": "list", "-d": "create-directory", "-t": "file-types", "-s": "separator",
+                "-v": "verify", "-c": "convert", "-h": "help"}
     arg_list = ["ADF file", "destination path"]
     
     # Read the options specified.
@@ -94,14 +96,25 @@ def read_getopt_input(argv):
         
             return None
     
-    # Read the remaining arguments: there should be two of these.
+    # Read the remaining arguments.
     
-    if match.has_key("list") and len(args) != 1:
+    if match.has_key("help"):
     
         return None
     
-    elif not match.has_key("list") and len(args) != 2:
+    elif match.has_key("list") and len(args) != 1:
     
+        # For list operations, there should be one remaining argument.
+        return None
+    
+    elif match.has_key("verify") and len(args) != 1:
+    
+        # For verify operations, there should be one remaining argument.
+        return None
+    
+    elif len(args) != 2:
+    
+        # For all other operations, there should be two remaining arguments.
         return None
     
     else:
@@ -122,28 +135,28 @@ if __name__ == "__main__":
     if use_getopt == 0:
     
         syntax = """
-        \r(
-        \r    (-l | --list) [-t | --file-types] <ADF file>
-        \r) |
-        \r(
-        \r    [-d | --create-directory]
-        \r    [(-t | --file-types) [(-s separator) | --separator=character]]
-        \r    <ADF file> <destination path>
-        \r) |
-        \r(
-        \r    (-v | --verify) <ADF file>
-        \r)
+        \r( (-l | --list) [-t | --file-types] <ADF file> ) |
+        \r
+        \r( [-d | --create-directory]
+        \r  [ (-t | --file-types) [(-s separator) | --separator=character] ]
+        \r  [(-c convert) | --convert=characters]
+        \r  <ADF file> <destination path> ) |
+        \r
+        \r( (-v | --verify) <ADF file> ) |
+        \r
+        \r(-h | --help)
         """
         
         match = read_cmdsyntax_input(sys.argv, syntax)
     
     else:
     
-        syntax = "[-l] [-d] [-t] [-s separator] [-v]" + \
+        syntax = "[-l] [-d] [-t] [-s separator] [-v] [-c characters] " + \
                  "<ADF file> <destination path>"
         match = read_getopt_input(sys.argv)
     
-    if match == {} or match is None:
+    if match == {} or match is None or \
+        match.has_key("h") or match.has_key("help"):
     
         print "Syntax: ADF2INF.py " + syntax
         print
@@ -168,6 +181,17 @@ if __name__ == "__main__":
         print "correctly located by this tool, whether due to a corrupted disc image"
         print "or a bug in the image decoding techniques used."
         print
+        print "The -c flag allows the user to define a conversion dictionary for the"
+        print "characters found in ADFS filenames. The format of the string used to"
+        print "define this dictionary is a comma separated list of character pairs:"
+        print
+        print "    <src1><dest1>[,<src2><dest2>]..."
+        print
+        print "If no conversion dictionary is specified then a default dictionary will"
+        print "be used. This is currently defined as"
+        print
+        print "    %s" % repr(default_convert_dict)
+        print
         sys.exit()
     
     
@@ -178,6 +202,7 @@ if __name__ == "__main__":
     filetypes = match.has_key("t") or match.has_key("file-types")
     use_separator = match.has_key("s") or match.has_key("separator")
     verify = match.has_key("v") or match.has_key("verify")
+    convert = match.has_key("c") or match.has_key("convert")
     
     adf_file = match["ADF file"]
     
@@ -207,10 +232,15 @@ if __name__ == "__main__":
         sys.exit()
     
     
-    if verify == 0:
+    if listing == 0 and verify == 0:
     
         # Create an ADFSdisc instance using this file.
         adfsdisc = ADFSlib.ADFSdisc(adf)
+    
+    elif listing != 0:
+    
+        # Create an ADFSdisc instance using this file.
+        adfsdisc = ADFSlib.ADFSdisc(adf, verify = 1)
     
     else:
     
@@ -233,11 +263,15 @@ if __name__ == "__main__":
         # Print catalogue
         print 'Contents of', adfsdisc.disc_name,':'
         print
-    
+        
         adfsdisc.print_catalogue(
             adfsdisc.files, adfsdisc.root_name, filetypes, separator
             )
-    
+        
+        print
+        
+        adfsdisc.print_log()
+        
         # Exit
         sys.exit()
     
@@ -250,8 +284,34 @@ if __name__ == "__main__":
         # Place the output files on this new path.
         out_path = os.path.join(out_path, adfsdisc.disc_name)
     
+    # If a list of conversions was specified then create a dictionary to
+    # pass to the disc object's extraction method.
+    if match.has_key("convert"):
+    
+        convert_dict = {}
+        
+        pairs = string.split(match["convert"])
+        
+        try:
+        
+            for pair in pairs:
+            
+                convert_dict[pair[0]] = pair[1]
+        
+        except IndexError:
+        
+            print "Insufficient characters in character conversion list."
+            sys.exit()
+    
+    else:
+    
+        # Use a default conversion dictionary.
+        convert_dict = default_convert_dict
+    
     # Extract the files
-    adfsdisc.extract_files(out_path, adfsdisc.files, filetypes, separator)
+    adfsdisc.extract_files(
+        out_path, adfsdisc.files, filetypes, separator, convert_dict
+        )
     
     # Exit
     sys.exit()
