@@ -31,8 +31,8 @@ setup(
     description="ADFS disk image reader and utility",
     author="David Boddie",
     author_email="david@boddie.org.uk",
-    url="http://www.boddie.org.uk/david/Projects/Python/ADF2INF",
-    version="0.11",
+    url="http://www.boddie.org.uk/david/Projects/Python/ADFSlib/",
+    version="0.12",
     py_modules=["ADFSlib"],
     scripts=["ADF2INF.py"]
     )
