@@ -5,7 +5,7 @@ ADFSlib.py
 A library for reading ADFS disc images.
 """
 
-__author__ = "David Boddie <david@boddie.org.uk>
+__author__ = "David Boddie <david@boddie.org.uk>"
 __date__ = "Thu 27th March 2003"
 __version__ = "0.1"
 
