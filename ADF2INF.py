@@ -48,14 +48,14 @@ class ADFSdisc:
         
         elif length == 819200:
         
-            if identify_format(adf) == 'D':
+            if self.identify_format(adf) == 'D':
                 self.ntracks = 80
                 self.nsectors = 10
                 self.sector_size = 1024
                 interleave = 0
                 self.disc_type = 'adD'
         
-            elif identify_format(adf) == 'E':
+            elif self.identify_format(adf) == 'E':
                 self.ntracks = 80
                 self.nsectors = 10
                 self.sector_size = 1024
@@ -91,30 +91,30 @@ class ADFSdisc:
         
             # Find the root directory name and all the files and directories
             # contained within it
-            self.root_name, self.files = read_old_catalogue(0x400)
+            self.root_name, self.files = self.read_old_catalogue(0x400)
         
         elif self.disc_type == 'adE':
         
             # Read the disc name and map
-            self.disc_name, self.disc_map = read_disc_info()
+            self.disc_name, self.disc_map = self.read_disc_info()
         
             # Find the root directory name and all the files and directories
             # contained within it
-            self.root_name, self.files = read_new_catalogue(0x800)
+            self.root_name, self.files = self.read_new_catalogue(0x800)
         
         elif self.disc_type == 'adEbig':
         
             # Read the disc name and map
-            self.disc_name, self.disc_map = read_disc_info()
+            self.disc_name, self.disc_map = self.read_disc_info()
         
             # Find the root directory name and all the files and directories
             # contained within it
-            self.root_name, self.files = read_new_catalogue(0xc8800)
+            self.root_name, self.files = self.read_new_catalogue(0xc8800)
         
         else:
             # Find the root directory name and all the files and directories
             # contained within it
-            self.root_name, self.files = read_old_catalogue(2*self.sector_size)
+            self.root_name, self.files = self.read_old_catalogue(2*self.sector_size)
     
     
     def str2num(self, size, s):
@@ -191,7 +191,7 @@ class ADFSdisc:
         # StartUp
         # LinkBits
         # BitSize (size of ID field?)
-        bit_size = str2num(1, self.sectors[offset + 6 : offset + 7])
+        bit_size = self.str2num(1, self.sectors[offset + 6 : offset + 7])
         # RASkew
         # BootOpt
         # Zones
@@ -203,9 +203,9 @@ class ADFSdisc:
         # SequenceSides
         # DoubleStep
         # DiscSize
-        disc_size = str2num(4, self.sectors[offset + 16 : offset + 20])
+        disc_size = self.str2num(4, self.sectors[offset + 16 : offset + 20])
         # DiscId
-        disc_id   = str2num(2, self.sectors[offset + 20 : offset + 22])
+        disc_id   = self.str2num(2, self.sectors[offset + 20 : offset + 22])
         # DiscName
         disc_name = string.strip(self.sectors[offset + 22 : offset + 32])
     
@@ -217,23 +217,23 @@ class ADFSdisc:
     def read_disc_info(self):
     
         checksum = ord(self.sectors[0])
-        first_free = str2num(2, self.sectors[1:3])
+        first_free = self.str2num(2, self.sectors[1:3])
     
         if self.disc_type == 'adE':
     
-            self.record = read_disc_record(4)
+            self.record = self.read_disc_record(4)
             self.map_start, self.map_end = 0x40, 0x400
-            #map = read_new_map(map_start, map_end)
-            map = scan_new_map(self.map_start, self.map_end)
+            #map = self.read_new_map(map_start, map_end)
+            map = self.scan_new_map(self.map_start, self.map_end)
             
             return self.record['disc name'], map
     
         if self.disc_type == 'adEbig':
     
-            self.record = read_disc_record(0xc6804)
+            self.record = self.read_disc_record(0xc6804)
             self.map_start, self.map_end = 0xc6840, 0xc7800
-            #map = read_new_map(map_start, map_end)
-            map = scan_new_map(self.map_start, self.map_end)
+            #map = self.read_new_map(map_start, map_end)
+            map = self.scan_new_map(self.map_start, self.map_end)
     
             return self.record['disc name'], map
     
@@ -253,7 +253,7 @@ class ADFSdisc:
         
         while a < end:
         
-            entry = str2num(2, self.sectors[a:a+2])
+            entry = self.str2num(2, self.sectors[a:a+2])
             
             # The next entry to be read will occur one byte after this one
             # unless one of the following checks override this behaviour.
@@ -348,7 +348,7 @@ class ADFSdisc:
         
         while a < end:
         
-            value = str2num(2, self.sectors[a:a+2])
+            value = self.str2num(2, self.sectors[a:a+2])
             entry = value & 0x7fff
             
             next = a + 1
@@ -408,7 +408,7 @@ class ADFSdisc:
                 a = starts[in_starts]
                 in_starts = in_starts + 1
             
-            entry = str2num(2, self.sectors[a:a+2])
+            entry = self.str2num(2, self.sectors[a:a+2])
             
             # The next entry to be read will occur one byte after this one
             # unless one of the following checks override this behaviour.
@@ -558,33 +558,33 @@ class ADFSdisc:
         p = 0
         while self.sectors[base+p] != 0:
     
-            free.append(str2num(3, self.sectors[base+p:base_p+3]))
+            free.append(self.str2num(3, self.sectors[base+p:base_p+3]))
     
         name = self.sectors[self.sector_size-9:self.sector_size-4]
     
-        disc_size = str2num(
+        disc_size = self.str2num(
             3, self.sectors[self.sector_size-4:self.sector_size-1]
             )
     
-        checksum0 = str2num(1, self.sectors[self.sector_size-1])
+        checksum0 = self.str2num(1, self.sectors[self.sector_size-1])
     
         base = self.sector_size
     
         p = 0
         while self.sectors[base+p] != 0:
     
-            free.append(str2num(3, self.sectors[base+p:base_p+3]))
+            free.append(self.str2num(3, self.sectors[base+p:base_p+3]))
     
         name = name + \
             self.sectors[base+self.sector_size-10:base+self.sector_size-5]
     
-        disc_id = str2num(
+        disc_id = self.str2num(
             2, self.sectors[base+self.sector_size-5:base+self.sector_size-3]
             )
     
-        boot = str2num(1, self.sectors[base+self.sector_size-3])
+        boot = self.str2num(1, self.sectors[base+self.sector_size-3])
     
-        checksum1 = str2num(1, self.sectors[base+self.sector_size-1])
+        checksum1 = self.str2num(1, self.sectors[base+self.sector_size-1])
     
     
     def read_old_catalogue(self, base):
@@ -613,22 +613,22 @@ class ADFSdisc:
                     top_set = counter
                 counter = counter + 1
     
-            name = safe(self.sectors[head+p:head+p+10])
+            name = self.safe(self.sectors[head+p:head+p+10])
     
-            load = str2num(4, self.sectors[head+p+10:head+p+14])
-            exe = str2num(4, self.sectors[head+p+14:head+p+18])
-            length = str2num(4, self.sectors[head+p+18:head+p+22])
+            load = self.str2num(4, self.sectors[head+p+10:head+p+14])
+            exe = self.str2num(4, self.sectors[head+p+14:head+p+18])
+            length = self.str2num(4, self.sectors[head+p+18:head+p+22])
     
             if self.disc_type == 'adD':
-                inddiscadd = 256 * str2num(
+                inddiscadd = 256 * self.str2num(
                     3, self.sectors[head+p+22:head+p+25]
                     )
             else:
-                inddiscadd = self.sector_size * str2num(
+                inddiscadd = self.sector_size * self.str2num(
                     3, self.sectors[head+p+22:head+p+25]
                     )
     
-            olddirobseq = str2num(1, self.sectors[head+p+25])
+            olddirobseq = self.str2num(1, self.sectors[head+p+25])
     
             #print string.expandtabs(
             #   "%s\t%s\t%s\t%s" % (
@@ -642,7 +642,7 @@ class ADFSdisc:
                 
                     # A directory has been found.
                     lower_dir_name, lower_files = \
-                        read_old_catalogue(inddiscadd)
+                        self.read_old_catalogue(inddiscadd)
                         
                     files.append([name, lower_files])
                 
@@ -660,7 +660,7 @@ class ADFSdisc:
                 
                     # A directory has been found.
                     lower_dir_name, lower_files = \
-                        read_old_catalogue(inddiscadd)
+                        self.read_old_catalogue(inddiscadd)
                     
                     files.append([name, lower_files])
                 
@@ -690,11 +690,11 @@ class ADFSdisc:
         # Read the directory name, its parent and any title given.
         if self.disc_type == 'adD':
         
-            dir_name = safe(
+            dir_name = self.safe(
                 self.sectors[tail+self.sector_size-16:tail+self.sector_size-6]
                 )
             
-            parent = 256*str2num(
+            parent = 256*self.str2num(
                 3,
                 self.sectors[tail+self.sector_size-38:tail+self.sector_size-35]
                 )
@@ -703,16 +703,16 @@ class ADFSdisc:
                 self.sectors[tail+self.sector_size-35:tail+self.sector_size-16]
         else:
         
-            dir_name = safe(
+            dir_name = self.safe(
                 self.sectors[tail+self.sector_size-52:tail+self.sector_size-42]
                 )
             
-            parent = self.sector_size*str2num(
+            parent = self.sector_size*self.str2num(
                 3,
                 self.sectors[tail+self.sector_size-42:tail+self.sector_size-39]
                 )
             
-            dir_title = safe(
+            dir_title = self.safe(
                 self.sectors[tail+self.sector_size-39:tail+self.sector_size-20]
                 )
         
@@ -734,7 +734,7 @@ class ADFSdisc:
     
         # From the three character string passed, determine the address on the
         # disc.
-        value = str2num(3, s)
+        value = self.str2num(3, s)
         
         # This is a SIN (System Internal Number)
         # The bottom 8 bits are the sector offset + 1
@@ -751,7 +751,7 @@ class ADFSdisc:
         
         # The pieces of the object are returned as a list of pairs of
         # addresses.
-        pieces = find_in_new_map(self.map_start, self.map_end, file_no)
+        pieces = self.find_in_new_map(self.map_start, self.map_end, file_no)
         
         if pieces == []:
         
@@ -793,16 +793,16 @@ class ADFSdisc:
                     top_set = counter
                 counter = counter + 1
     
-            name = safe(self.sectors[head+p:head+p+10])
+            name = self.safe(self.sectors[head+p:head+p+10])
     
             #print hex(head+p), name
     
-            load = str2num(4, self.sectors[head+p+10:head+p+14])
-            exe = str2num(4, self.sectors[head+p+14:head+p+18])
-            length = str2num(4, self.sectors[head+p+18:head+p+22])
+            load = self.str2num(4, self.sectors[head+p+10:head+p+14])
+            exe = self.str2num(4, self.sectors[head+p+14:head+p+18])
+            length = self.str2num(4, self.sectors[head+p+18:head+p+22])
     
-            inddiscadd = read_new_address(self.sectors[head+p+22:head+p+25])
-            newdiratts = str2num(1, self.sectors[head+p+25])
+            inddiscadd = self.read_new_address(self.sectors[head+p+22:head+p+25])
+            newdiratts = self.str2num(1, self.sectors[head+p+25])
             
             #print hex(head+p+22),
             #print "addrs:", map(lambda x: map(hex, x), inddiscadd),
@@ -842,7 +842,7 @@ class ADFSdisc:
                         # as a directory.
                         
                         lower_dir_name, lower_files = \
-                            read_new_catalogue(start)
+                            self.read_new_catalogue(start)
                         
                         # Store the directory name and file found therein.
                         files.append([name, lower_files])
@@ -876,11 +876,11 @@ class ADFSdisc:
             print 'Discrepancy in directory structure'
             return '', files
     
-        dir_name = safe(
+        dir_name = self.safe(
             self.sectors[tail+self.sector_size-16:tail+self.sector_size-6]
             )
         
-        #parent = read_new_address(
+        #parent = self.read_new_address(
         #    self.sectors[tail+self.sector_size-38:tail+self.sector_size-35], dir = 1
         #    )
         #print "This directory:", hex(head), "Parent:", hex(parent)
@@ -888,7 +888,7 @@ class ADFSdisc:
         parent = \
             self.sectors[tail+self.sector_size-38:tail+self.sector_size-35]
         
-        #256*str2num(
+        #256*self.str2num(
         #   3, self.sectors[tail+self.sector_size-38:tail+self.sector_size-35]
         #)
         
@@ -952,7 +952,7 @@ class ADFSdisc:
                         )
             
             else:
-                print_catalogue(i[1], path + "." + name)
+                self.print_catalogue(i[1], path + "." + name)
     
     
     def extract_old_files(self, l, path):
@@ -1004,14 +1004,14 @@ class ADFSdisc:
             else:
                 if name != '$':
                 
-                    new_path = create_directory(path, name)
+                    new_path = self.create_directory(path, name)
                     
                     if new_path != "":
                     
-                        extract_old_files(i[1], new_path)
+                        self.extract_old_files(i[1], new_path)
                     
                 else:
-                    extract_old_files(i[1], path)
+                    self.extract_old_files(i[1], path)
     
     
     def extract_new_files(self, l, path):
@@ -1062,14 +1062,14 @@ class ADFSdisc:
             else:
                 if name != '$':
                 
-                    new_path = create_directory(path, name)
+                    new_path = self.create_directory(path, name)
                     
                     if new_path != "":
                     
-                        extract_new_files(i[1], new_path)
+                        self.extract_new_files(i[1], new_path)
                     
                 else:
-                    extract_new_files(i[1], path)
+                    self.extract_new_files(i[1], path)
     
     def extract_files(self, out_path, files = None):
     
@@ -1079,19 +1079,19 @@ class ADFSdisc:
         
         if self.disc_type == 'adD':
         
-            extract_old_files(files, out_path)
+            self.extract_old_files(files, out_path)
         
         elif self.disc_type == 'adE':
         
-            extract_new_files(files, out_path)
+            self.extract_new_files(files, out_path)
         
         elif self.disc_type == 'adEbig':
         
-            extract_new_files(files, out_path)
+            self.extract_new_files(files, out_path)
         
         else:
         
-            extract_old_files(files, out_path)
+            self.extract_old_files(files, out_path)
     
     def create_directory(self, path, name):
     
