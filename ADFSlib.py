@@ -953,7 +953,8 @@ class ADFSdisc:
             return path
     
     
-    def print_catalogue(self, files = None, path = "$", filetypes = 0):
+    def print_catalogue(self, files = None, path = "$", filetypes = 0,
+                        separator = ","):
     
         if files is None:
         
@@ -988,7 +989,7 @@ class ADFSdisc:
                 self.print_catalogue(i[1], path + "." + name, filetypes)
     
     
-    def extract_old_files(self, l, path, filetypes = 0):
+    def extract_old_files(self, l, path, filetypes = 0, separator = ","):
     
         for i in l:
         
@@ -1004,7 +1005,7 @@ class ADFSdisc:
                     
                     # Create the INF file
                     out_file = os.path.join(path, name)
-                    inf_file = os.path.join(path, name) + suffix + "inf"
+                    inf_file = os.path.join(path, name) + separator + "inf"
                     
                     try:
                         out = open(out_file, "wb")
@@ -1047,7 +1048,7 @@ class ADFSdisc:
                     self.extract_old_files(i[1], path, filetypes)
     
     
-    def extract_new_files(self, l, path, filetypes = 0):
+    def extract_new_files(self, l, path, filetypes = 0, separator = ","):
     
         for i in l:
         
@@ -1063,7 +1064,7 @@ class ADFSdisc:
                     
                     # Create the INF file
                     out_file = path + os.sep + name
-                    inf_file = path + os.sep + name + suffix + "inf"
+                    inf_file = path + os.sep + name + separator + "inf"
                     
                     try:
                         out = open(out_file, "wb")

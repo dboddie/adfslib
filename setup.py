@@ -23,6 +23,6 @@ setup(
     author_email="david@boddie.org.uk",
     url="http://www.boddie.org.uk/david/Projects/Python/ADF2INF",
     version="0.31c",
-    py_modules=["ADFSlib"]
+    py_modules=["ADFSlib"],
     scripts=["ADF2INF"]
     )

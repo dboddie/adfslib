@@ -79,22 +79,21 @@ if __name__ == "__main__":
     
         out_path = match["destination path"]
     
-    if use_separator != 0:
-    
-        separator = match["separator"]
+    separator = match.get("separator", ",")
     
     if sys.platform == 'RISCOS':
         suffix = '/'
     else:
         suffix = '.'
     
-    if filetypes != 0 and use_separator == 0:
-    
+    if filetypes == 0 or (filetypes != 0 and use_separator == 0):
+
+        # Use the standard suffix separator for the current platform if
+        # none is specified.    
         separator = suffix
     
     
-    # Disc properties
-    
+    # Try to open the ADFS disc image file.
     
     try:
         adf = open(adf_file, "rb")
@@ -113,7 +112,9 @@ if __name__ == "__main__":
         print 'Contents of', adfsdisc.disc_name,':'
         print
     
-        adfsdisc.print_catalogue(adfsdisc.files, adfsdisc.root_name, filetypes)
+        adfsdisc.print_catalogue(
+            adfsdisc.files, adfsdisc.root_name, filetypes, separator
+            )
     
         # Exit
         sys.exit()
@@ -149,7 +150,7 @@ if __name__ == "__main__":
             print "Couldn't create directory: %s" % self.disc_name
     
     # Extract the files
-    adfsdisc.extract_files(out_path, adfsdisc.files, filetypes)
+    adfsdisc.extract_files(out_path, adfsdisc.files, filetypes, separator)
     
     # Exit
     sys.exit()
