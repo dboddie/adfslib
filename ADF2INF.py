@@ -837,7 +837,7 @@ if matches == [] and cmdsyntax.use_GUI() != None:
 # Take the first match.
 match = matches[0]
 
-if match == {}:
+if match == {} or match is None:
 
     print "Syntax: ADF2INF.py "+syntax
     print
