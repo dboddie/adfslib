@@ -9,7 +9,7 @@
 """
 
 
-import os, string, sys
+import os, sys
 import ADFSlib, cmdsyntax
 
 
