@@ -190,41 +190,6 @@ def read_disc_info(disc_type):
 #    zone_size = 819200 / record['zones']
 #    ids_per_zone = zone_size /
 
-def _read_new_map(disc_type, begin, end):
-
-    map = {}
-
-    a = begin
-
-    while a < (end - 1):
-
-        entry = str2num(2, sectors[a:a+2]) & 0x7fff
-
-        # Entry must be above 1 (defect)
-        if entry > 1:
-        
-            if map.has_key(entry) == 0:
-            
-                map[entry] = []
-
-            if disc_type == 'adE':
-                map[entry].append( ((a - begin) * sector_size) )
-
-            elif disc_type == 'adEbig':
-                upper = (entry & 0x7f00) >> 8
-
-                if upper > 1:
-                    upper = upper - 1
-                if upper > 3:
-                    upper = 3
-
-                map[entry].append( ((a - begin) - (upper * 0xc8)) * 0x200 )
-        
-        a = a + 1
-    
-    return map
-
-
 def read_new_map(disc_type, begin, end):
 
     map = {}
@@ -520,69 +485,6 @@ def read_old_catalogue(disc_type, base):
     return dir_name, files
 
 
-def _read_new_address(s, dir = 0):
-
-    # From the three character string passed, determine the address on the disc
-    value = str2num(3, s)
-    
-    # This is a SIN (System Internal Number)
-    # The bottom 8 bits are the sector offset + 1
-    offset = value & 0xff
-    if offset != 0:
-        address = (offset - 1) * sector_size
-    else:
-        address = 0
-    
-    # The top 16 bits are the file number
-    file_no = value >> 8
-    
-#    # Search for the file number in the disc map (0x40 -- 0x3ff)
-#    a = 0x40
-#    while a < 0x3ff:
-#
-#        entry = str2num(2, sectors[a:a+2]) & 0x7fff
-#
-#        if entry == file_no:
-#
-#            return ((a - 0x40) * sector_size) + address
-#
-#        a = a + 1
-    
-    # The address is given in a list.
-    try:
-    
-        addresses = disc_map[file_no]
-    
-    except KeyError:
-    
-        return -1
-    
-    
-    if len(addresses) == 1:
-    
-        return address + addresses[0]
-    
-    else:
-    
-        # There is more than one address.
-        if dir != 0:
-        
-            # Find a directory.
-            for addr in addresses:
-            
-                if sectors[address+addr+1:address+addr+5] == "Nick":
-                
-                    return address + addr
-            
-            print "Problem finding directory at addresses:", map(hex, addresses)
-        
-        else:
-        
-            print "Problem finding file at addresses:", map(hex, addresses)
-    
-    return addresses[0] + address
-
-
 def read_new_address(s, dir = 0):
 
     # From the three character string passed, determine the address on the disc
@@ -693,8 +595,6 @@ def read_new_catalogue(disc_type, base):
                     # Try to interpret the data at the referenced address as a
                     # directory.
                     
-                    #lower_dir_name, lower_files = \
-                    #    read_new_catalogue(disc_type, inddiscadd)
                     lower_dir_name, lower_files = \
                         read_new_catalogue(disc_type, start)
                     
@@ -715,7 +615,6 @@ def read_new_catalogue(disc_type, base):
                     file = file + sectors[start : (start + amount)]
                     remaining = remaining - amount
                 
-                #files.append([name, sectors[inddiscadd:inddiscadd+length], load, exe, length])
                 files.append([name, file, load, exe, length])
 
         p = p + 26
