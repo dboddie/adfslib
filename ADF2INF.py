@@ -91,7 +91,7 @@ class ADFSdisc:
         
             # Find the root directory name and all the files and directories
             # contained within it
-            dir_name, files = read_old_catalogue(0x400)
+            self.root_name, self.files = read_old_catalogue(0x400)
         
         elif self.disc_type == 'adE':
         
@@ -100,7 +100,7 @@ class ADFSdisc:
         
             # Find the root directory name and all the files and directories
             # contained within it
-            dir_name, files = read_new_catalogue(0x800)
+            self.root_name, self.files = read_new_catalogue(0x800)
         
         elif self.disc_type == 'adEbig':
         
@@ -109,12 +109,12 @@ class ADFSdisc:
         
             # Find the root directory name and all the files and directories
             # contained within it
-            dir_name, files = read_new_catalogue(0xc8800)
+            self.root_name, self.files = read_new_catalogue(0xc8800)
         
         else:
             # Find the root directory name and all the files and directories
             # contained within it
-            dir_name, files = read_old_catalogue(2*self.sector_size)
+            self.root_name, self.files = read_old_catalogue(2*self.sector_size)
     
     
     def str2num(self, size, s):
@@ -920,9 +920,13 @@ class ADFSdisc:
             return path
     
     
-    def print_catalogue(self, l, path):
+    def print_catalogue(self, files = None, path = "$"):
     
-        for i in l:
+        if files is None:
+        
+            files = self.files
+        
+        for i in files:
     
             name = i[0]
             if type(i[1]) != type([]):
@@ -1067,6 +1071,28 @@ class ADFSdisc:
                 else:
                     extract_new_files(i[1], path)
     
+    def extract_files(self, out_path, files = None):
+    
+        if files is None:
+        
+            files = self.files
+        
+        if self.disc_type == 'adD':
+        
+            extract_old_files(files, out_path)
+        
+        elif self.disc_type == 'adE':
+        
+            extract_new_files(files, out_path)
+        
+        elif self.disc_type == 'adEbig':
+        
+            extract_new_files(files, out_path)
+        
+        else:
+        
+            extract_old_files(files, out_path)
+    
     def create_directory(self, path, name):
     
         elements = list(os.path.split(path)) + [name]
@@ -1207,10 +1233,10 @@ if __name__ == "__main__":
     # Print catalogue
     if listing != 0:
     
-        print 'Contents of', self.disc_name,':'
+        print 'Contents of', adfsdisc.disc_name,':'
         print
     
-        print_catalogue(files, dir_name)
+        adfsdisc.print_catalogue(adfsdisc.files, adfsdisc.root_name)
     
         # Exit
         sys.exit()
@@ -1230,30 +1256,23 @@ if __name__ == "__main__":
     # Make sure that the disc is put in a directory corresponding to the disc
     # name where applicable.
     
-    if use_name != 0 and self.disc_name != '$':
+    if use_name != 0 and adfsdisc.disc_name != '$':
     
-        try:
-            new_path = os.path.join(out_path, self.disc_name)
-            os.mkdir(new_path)
-            out_path = new_path
+        new_path = adfsdisc.create_directory(out_path, adfsdisc.disc_name)
+        
+        if new_path != "":
+        
             print 'Created directory: %s' % new_path
-        except IOError:
+            
+            # Place the output files on this new path.
+            out_path = new_path
+        
+        else:
+        
             print "Couldn't create directory: %s" % self.disc_name
     
     # Extract the files
-    
-    if self.disc_type == 'adD':
-        extract_old_files(files, out_path)
-    
-    elif self.disc_type == 'adE':
-        extract_new_files(files, out_path)
-    
-    elif self.disc_type == 'adEbig':
-        extract_new_files(files, out_path)
-    
-    else:
-        extract_old_files(files, out_path)
-    
+    adfsdisc.extract_files(adfsdisc.files, out_path)
     
     # Exit
     sys.exit()
