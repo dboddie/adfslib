@@ -3,40 +3,34 @@
     Name        : ADF2INF.py
     Author      : David Boddie
     Created     : Wed 18th October 2000
-    Updated     : Mon 24th March 2003
+    Updated     : Tue 15th April 2003
     Purpose     : Convert ADFS disc images (ADF) to INF files
-    WWW         : http://david.boddie.org.uk/Projects/Emulation/T2Tools
+    WWW         : http://david.boddie.org.uk/Projects/Python/ADFSlib
 """
 
 
 import os, sys
-import ADFSlib, cmdsyntax
+import ADFSlib
+
+try:
+
+    import cmdsyntax
+    use_getopt = 0
+
+except ImportError:
+
+    import getopt
+    use_getopt = 1
 
 
-__version__ = "0.31c (Wed 26th March 2003)"
+__version__ = "0.32c (Tue 15th April 2003)"
 
 
-if __name__ == "__main__":
-    
-    syntax = """
-    (
-        (-l | --list) [-t | --file-types] <ADF file>
-    ) |
-    (
-        [-d | --create-directory]
-        [(-t | --file-types) [(-s separator) | --separator=character]]
-        <ADF file> <destination path>
-    ) |
-    (
-        (-v | --verify) <ADF file>
-    )
-    """
-    
-    version = __version__
-    
+def read_cmdsyntax_input(argv, syntax):
+
     syntax_obj = cmdsyntax.Syntax(syntax)
     
-    matches, failed = syntax_obj.get_args(sys.argv[1:], return_failed = 1)
+    matches, failed = syntax_obj.get_args(argv[1:], return_failed = 1)
     
     if len(matches) != 1 and cmdsyntax.use_GUI() != None:
     
@@ -53,11 +47,85 @@ if __name__ == "__main__":
     
         match = None
     
+    return match
+
+
+def read_getopt_input(argv):
+
+    opts, args = getopt.getopt(argv[1:], "ldts:v")
+
+    match = {}
+    
+    opt_dict = {"-l": "list", "-d": "directory", "-t": "file-types", "-s": "separator",
+                "-v": "verify"}
+    arg_list = ["ADF file", "destination path"]
+    
+    # Read the options specified.
+    
+    for opt, value in opts:
+    
+        if opt_dict.has_key(opt):
+        
+            match[opt_dict[opt]] = value or '1'
+        
+        else:
+        
+            return None
+    
+    # Read the remaining arguments: there should be two of these.
+    
+    if match.has_key("list") and len(args) != 1:
+    
+        return None
+    
+    elif not match.has_key("list") and len(args) != 2:
+    
+        return None
+    
+    else:
+    
+        i = 0
+        for arg in args:
+        
+            match[arg_list[i]] = arg
+            i = i + 1
+    
+    if match == {}: match = None
+    
+    return match
+
+
+if __name__ == "__main__":
+    
+    if use_getopt == 0:
+    
+        syntax = """
+        \r(
+        \r    (-l | --list) [-t | --file-types] <ADF file>
+        \r) |
+        \r(
+        \r    [-d | --create-directory]
+        \r    [(-t | --file-types) [(-s separator) | --separator=character]]
+        \r    <ADF file> <destination path>
+        \r) |
+        \r(
+        \r    (-v | --verify) <ADF file>
+        \r)
+        """
+        
+        match = read_cmdsyntax_input(sys.argv, syntax)
+    
+    else:
+    
+        syntax = "[-l] [-d] [-t] [-s separator] [-v]" + \
+                 "<ADF file> <destination path>"
+        match = read_getopt_input(sys.argv)
+    
     if match == {} or match is None:
     
-        print "Syntax: ADF2INF.py "+syntax
+        print "Syntax: ADF2INF.py " + syntax
         print
-        print 'ADF2INF version '+version
+        print 'ADF2INF version ' + __version__
         print
         print 'Take the files stored in the directory given and store them as files with'
         print 'corresponding INF files.'
@@ -81,7 +149,6 @@ if __name__ == "__main__":
     
     
     # Determine whether the file is to be listed
-    
     
     listing = match.has_key("l") or match.has_key("list")
     use_name = match.has_key("d") or match.has_key("create-directory")
