@@ -26,13 +26,15 @@ except ImportError:
         sys.exit()
 
 
+import ADFSlib
+
 setup(
-    name="ADFSlib",
+    name="ADF2INF",
     description="ADFS disk image reader and utility",
     author="David Boddie",
     author_email="david@boddie.org.uk",
-    url="http://www.boddie.org.uk/david/Projects/Python/ADFSlib/",
-    version="0.21",
+    url="http://www.boddie.org.uk/david/Projects/Python/ADFSlib",
+    version=ADFSlib.__version__,
     py_modules=["ADFSlib"],
     scripts=["ADF2INF.py"]
     )
