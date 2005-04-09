@@ -30,7 +30,7 @@ __date__ = "Mon 21st July 2003"
 __version__ = "0.21"
 
 
-import os, string
+import os, string, struct
 
 
 INFORM = 0
@@ -76,7 +76,9 @@ class ADFSdisc:
             self.ntracks = 160
             self.nsectors = 16        # per track
             self.sector_size = 256    # in bytes
-            interleave = 0 # 1
+            # Interleave was originally 1 then 0 (from
+            # ~/Private/ADFS/LFormat.htm).
+            interleave = 1
             self.disc_type = 'adl'
         
         elif length == 819200:
@@ -155,6 +157,32 @@ class ADFSdisc:
             # contained within it
             self.root_name, self.files = self.read_old_catalogue(2*self.sector_size)
     
+    
+    # Little endian reading
+    
+    def read_signed_word(self, s):
+    
+        return struct.unpack("<i", s)[0]
+    
+    def read_unsigned_word(self, s):
+    
+        return struct.unpack("<I", s)[0]
+    
+    def read_signed_byte(self, s):
+    
+        return struct.unpack("<b", s)[0]
+    
+    def read_unsigned_byte(self, s):
+    
+        return struct.unpack("<B", s)[0]
+    
+    def read_unsigned_half_word(self, s):
+    
+        return struct.unpack("<H", s)[0]
+    
+    def read_signed_half_word(self, s):
+    
+        return struct.unpack("<h", s)[0]
     
     def str2num(self, size, s):
     
@@ -356,14 +384,14 @@ class ADFSdisc:
             density = 'unknown'
         
         # Length of ID fields in the disc map
-        idlen = self.str2num(1, self.sectors[offset + 4])
+        idlen = self.read_unsigned_byte(self.sectors[offset + 4])
         # Number of bytes per map bit.
-        bytes_per_bit = 2 ** self.str2num(1, self.sectors[offset + 5])
+        bytes_per_bit = 2 ** self.read_unsigned_byte(self.sectors[offset + 5])
         # LowSector
         # StartUp
         # LinkBits
         # BitSize (size of ID field?)
-        bit_size = self.str2num(1, self.sectors[offset + 6 : offset + 7])
+        bit_size = self.read_unsigned_byte(self.sectors[offset + 6 : offset + 7])
         #print "Bit size: %s" % hex(bit_size)
         # RASkew
         # BootOpt
@@ -376,9 +404,9 @@ class ADFSdisc:
         # SequenceSides
         # DoubleStep
         # DiscSize
-        disc_size = self.str2num(4, self.sectors[offset + 16 : offset + 20])
+        disc_size = self.read_unsigned_word(self.sectors[offset + 16 : offset + 20])
         # DiscId
-        disc_id   = self.str2num(2, self.sectors[offset + 20 : offset + 22])
+        disc_id   = self.read_unsigned_half_word(self.sectors[offset + 20 : offset + 22])
         # DiscName
         disc_name = string.strip(self.sectors[offset + 22 : offset + 32])
         
@@ -392,7 +420,7 @@ class ADFSdisc:
     def read_disc_info(self):
     
         checksum = ord(self.sectors[0])
-        first_free = self.str2num(2, self.sectors[1:3])
+        first_free = self.read_unsigned_half_word(self.sectors[1:3])
         
         if self.disc_type == 'adE':
         
@@ -483,7 +511,7 @@ class ADFSdisc:
             
                 # If there is enough space left in this zone to allow
                 # further fragments then read the next two bytes.
-                value = self.str2num(2, self.sectors[a:a+2])
+                value = self.read_unsigned_half_word(self.sectors[a:a+2])
                 
                 entry = value & 0x7fff
                 
@@ -606,7 +634,7 @@ class ADFSdisc:
             
             # Start by reading the offset in bits from the start of the header
             # of the first item of free space in the map.
-            offset = self.str2num(2, self.sectors[a:a+2])
+            offset = self.read_unsigned_half_word(self.sectors[a:a+2])
             
             # The top bit is apparently always set, so mask it off and convert
             # the result into bytes. * Not sure if this is the case for
@@ -626,7 +654,7 @@ class ADFSdisc:
             while a < next_zone:
             
                 # Read the offset to the next free fragment in this zone.
-                offset = self.str2num(2, self.sectors[a:a+2])
+                offset = self.read_unsigned_half_word(self.sectors[a:a+2])
                 
                 # Convert this to a byte offset.
                 next = ((offset & 0x7fff) >> 3)
@@ -638,7 +666,7 @@ class ADFSdisc:
                 
                     c = b + 1
                     
-                    value = self.str2num(1, self.sectors[b])
+                    value = self.read_unsigned_byte(self.sectors[b])
                     
                     if (value & 0x80) != 0:
                     
@@ -674,6 +702,13 @@ class ADFSdisc:
         
         elif self.disc_type == 'adEbig':
         
+            # I can't remember where the rationale for this calculation
+            # came from or where the necessary information was obtained.
+            # It probably came from one of the WSS files, such as
+            # Formats.htm or Formats2.htm which imply that the F format
+            # uses 512 byte sectors (see the 0x200 value below) and
+            # indicate that F format uses 4 zones rather than 1.
+            
             upper = (entry & 0x7f00) >> 8
             
             if upper > 1:
@@ -804,7 +839,7 @@ class ADFSdisc:
             3, self.sectors[self.sector_size-4:self.sector_size-1]
             )
     
-        checksum0 = self.str2num(1, self.sectors[self.sector_size-1])
+        checksum0 = self.read_unsigned_byte(self.sectors[self.sector_size-1])
     
         base = self.sector_size
     
@@ -820,9 +855,9 @@ class ADFSdisc:
             2, self.sectors[base+self.sector_size-5:base+self.sector_size-3]
             )
     
-        boot = self.str2num(1, self.sectors[base+self.sector_size-3])
+        boot = self.read_unsigned_byte(self.sectors[base+self.sector_size-3])
     
-        checksum1 = self.str2num(1, self.sectors[base+self.sector_size-1])
+        checksum1 = self.read_unsigned_byte(self.sectors[base+self.sector_size-1])
     
     
     def read_old_catalogue(self, base):
@@ -859,9 +894,9 @@ class ADFSdisc:
             
             name = self.safe(self.sectors[head+p:head+p+10])
             
-            load = self.str2num(4, self.sectors[head+p+10:head+p+14])
-            exe = self.str2num(4, self.sectors[head+p+14:head+p+18])
-            length = self.str2num(4, self.sectors[head+p+18:head+p+22])
+            load = self.read_unsigned_word(self.sectors[head+p+10:head+p+14])
+            exe = self.read_unsigned_word(self.sectors[head+p+14:head+p+18])
+            length = self.read_unsigned_word(self.sectors[head+p+18:head+p+22])
             
             if self.disc_type == 'adD':
                 inddiscadd = 256 * self.str2num(
@@ -872,7 +907,7 @@ class ADFSdisc:
                     3, self.sectors[head+p+22:head+p+25]
                     )
             
-            olddirobseq = self.str2num(1, self.sectors[head+p+25])
+            olddirobseq = self.read_unsigned_byte(self.sectors[head+p+25])
             
             #print string.expandtabs(
             #   "%s\t%s\t%s\t%s" % (
@@ -1081,9 +1116,9 @@ class ADFSdisc:
             
             #print hex(head+p), name
             
-            load = self.str2num(4, self.sectors[head+p+10:head+p+14])
-            exe = self.str2num(4, self.sectors[head+p+14:head+p+18])
-            length = self.str2num(4, self.sectors[head+p+18:head+p+22])
+            load = self.read_unsigned_word(self.sectors[head+p+10:head+p+14])
+            exe = self.read_unsigned_word(self.sectors[head+p+14:head+p+18])
+            length = self.read_unsigned_word(self.sectors[head+p+18:head+p+22])
             
             #print hex(ord(self.sectors[head+p+22])), \
             #        hex(ord(self.sectors[head+p+23])), \
@@ -1092,7 +1127,7 @@ class ADFSdisc:
             inddiscadd = self.read_new_address(
                 self.sectors[head+p+22:head+p+25]
                 )
-            newdiratts = self.str2num(1, self.sectors[head+p+25])
+            newdiratts = self.read_unsigned_byte(self.sectors[head+p+25])
             
             if inddiscadd == -1:
             
