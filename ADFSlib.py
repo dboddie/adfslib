@@ -25,15 +25,18 @@ If not, write to the Free Software Foundation, Inc.,
 
 __author__ = "David Boddie <david@boddie.org.uk>"
 __date__ = "Sun 8th June 2008"
-__version__ = "0.30"
+__version__ = "0.31"
 
 
-import os, string, struct
+import os, string, struct, time
 
 
 INFORM = 0
 WARNING = 1
 ERROR = 2
+
+# Find the number of centiseconds between 1900 and 1970.
+between_epochs = ((365 * 70) + 17) * 24 * 360000L
 
 
 class ADFS_exception(Exception):
@@ -77,9 +80,31 @@ class ADFSfile:
     
         return '<%s instance, "%s", at %x>' % (self.__class__, self.name, id(self))
     
+    def has_filetype(self):
+    
+        return self.load_address & 0xfff00000 == 0xfff00000
+    
     def filetype(self):
     
         return "%x" % ((self.load_address >> 8) & 0xfff)
+    
+    def time_stamp(self):
+    
+        # RISC OS time is given as a five byte block containing the
+        # number of centiseconds since 1900 (presumably 1st January 1900).
+        
+        # Convert the time to the time elapsed since the Epoch (assuming
+        # 1970 for this value).
+        date_num = struct.unpack("<Q",
+            struct.pack("<IBxxx", self.execution_address, self.load_address & 0xff))[0]
+        
+        centiseconds = date_num - between_epochs
+        
+        # Convert this to a value in seconds and return a time tuple.
+        try:
+            return time.localtime(centiseconds / 100.0)
+        except ValueError:
+            return ()
 
 
 class ADFSdisc:
@@ -1399,12 +1424,27 @@ class ADFSdisc:
                 
                 else:
                 
-                    # Load address treated as a filetype.
-                    print string.expandtabs(
-                        "%s.%s\t%s\t%X" % (
-                            path, name, obj.filetype().upper(), obj.length
-                            ), 16
-                        )
+                    # Load address treated as a filetype; load and execution
+                    # addresses treated as a time stamp.
+                    
+                    time_stamp = obj.time_stamp()
+                    if not time_stamp or not obj.has_filetype():
+                    
+                        print string.expandtabs(
+                            "%s.%s\t%X\t%X\t%X" % (
+                                path, name, obj.load_address,
+                                obj.execution_address, obj.length
+                                ), 16
+                            )
+                    else:
+                    
+                        time_stamp = time.strftime("%H:%M:%S, %a %m %b %Y", time_stamp)
+                        print string.expandtabs(
+                            "%s.%s\t%s\t%s\t%X" % (
+                                path, name, obj.filetype().upper(), time_stamp,
+                                obj.length
+                                ), 16
+                            )
             
             else:
             
