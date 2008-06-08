@@ -29,7 +29,7 @@ except ImportError:
 import ADFSlib
 
 setup(
-    name="ADF2INF",
+    name="ADFSlib",
     description="ADFS disk image reader and utility",
     author="David Boddie",
     author_email="david@boddie.org.uk",
