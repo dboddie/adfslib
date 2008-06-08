@@ -4,7 +4,7 @@ ADFSlib.py
 
 A library for reading ADFS disc images.
 
-Copyright (c) 2003-2005, David Boddie
+Copyright (c) 2003-2008, David Boddie
 
 This software is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License as
@@ -24,8 +24,8 @@ If not, write to the Free Software Foundation, Inc.,
 """
 
 __author__ = "David Boddie <david@boddie.org.uk>"
-__date__ = "Sun 10th April 2005"
-__version__ = "0.22"
+__date__ = "Sun 8th June 2008"
+__version__ = "0.30"
 
 
 import os, string, struct
@@ -41,8 +41,64 @@ class ADFS_exception(Exception):
     pass
 
 
+class ADFSdirectory:
+
+    """ADFSdirectory
+    
+    directory = ADFSdirectory(name, files)
+    """
+    
+    def __init__(self, name, files):
+    
+        self.name = name
+        self.files = files
+    
+    def __repr__(self):
+    
+        return '<%s instance, "%s", at %x>' % (self.__class__, self.name, id(self))
+
+
+class ADFSfile:
+
+    """ADFSfile
+    
+    file = ADFSfile(name, data, load_address, execution_address, length)
+    """
+    
+    def __init__(self, name, data, load_address, execution_address, length):
+    
+        self.name = name
+        self.data = data
+        self.load_address = load_address
+        self.execution_address = execution_address
+        self.length = length
+    
+    def __repr__(self):
+    
+        return '<%s instance, "%s", at %x>' % (self.__class__, self.name, id(self))
+    
+    def filetype(self):
+    
+        return "%x" % ((self.load_address >> 8) & 0xfff)
+
+
 class ADFSdisc:
 
+    """ADFSdisc
+    
+    disc = ADFSdisc(file_handle, verify = 0)
+    
+    Represents an ADFS disc image stored in the file with the specified file
+    handle. The image is not verified by default; pass True or another
+    non-False value to request automatic verification of the disc format.
+    
+    If the disc image specified cannot be read successfully, an ADFS_exception
+    is raised.
+    
+    Once an ADFSdisc instance has been created, it can be used to access the
+    contents of the disc image. The files attribute contains
+    """
+    
     def __init__(self, adf, verify = 0):
     
         # Log problems if the verify flag is set.
@@ -86,7 +142,7 @@ class ADFSdisc:
             self.sector_size = 1024
             interleave = 0
             
-            format = self.identify_format(adf)
+            format = self._identify_format(adf)
             
             if format == 'D':
             
@@ -112,7 +168,7 @@ class ADFSdisc:
             raise ADFS_exception, 'Please supply a .adf, .adl or .adD file.'
         
         # Read tracks
-        self.sectors = self.read_tracks(adf, interleave)
+        self.sectors = self._read_tracks(adf, interleave)
         
         # Close the ADF file
         adf.close()
@@ -129,60 +185,60 @@ class ADFSdisc:
         
             # Find the root directory name and all the files and directories
             # contained within it
-            self.root_name, self.files = self.read_old_catalogue(0x400)
+            self.root_name, self.files = self._read_old_catalogue(0x400)
         
         elif self.disc_type == 'adE':
         
             # Read the disc name and map
-            self.disc_name = self.safe(self.read_disc_info(), with_space = 1)
+            self.disc_name = self._safe(self._read_disc_info(), with_space = 1)
             
             # Find the root directory name and all the files and directories
             # contained within it
-            self.root_name, self.files = self.read_new_catalogue(0x800)
+            self.root_name, self.files = self._read_new_catalogue(0x800)
         
         elif self.disc_type == 'adEbig':
         
             # Read the disc name and map
-            self.disc_name = self.safe(self.read_disc_info(), with_space = 1)
+            self.disc_name = self._safe(self._read_disc_info(), with_space = 1)
             
             # Find the root directory name and all the files and directories
             # contained within it
-            self.root_name, self.files = self.read_new_catalogue(0xc8800)
+            self.root_name, self.files = self._read_new_catalogue(0xc8800)
         
         else:
         
             # Find the root directory name and all the files and directories
             # contained within it
-            self.root_name, self.files = self.read_old_catalogue(2*self.sector_size)
+            self.root_name, self.files = self._read_old_catalogue(2*self.sector_size)
     
     
     # Little endian reading
     
-    def read_signed_word(self, s):
+    def _read_signed_word(self, s):
     
         return struct.unpack("<i", s)[0]
     
-    def read_unsigned_word(self, s):
+    def _read_unsigned_word(self, s):
     
         return struct.unpack("<I", s)[0]
     
-    def read_signed_byte(self, s):
+    def _read_signed_byte(self, s):
     
         return struct.unpack("<b", s)[0]
     
-    def read_unsigned_byte(self, s):
+    def _read_unsigned_byte(self, s):
     
         return struct.unpack("<B", s)[0]
     
-    def read_unsigned_half_word(self, s):
+    def _read_unsigned_half_word(self, s):
     
         return struct.unpack("<H", s)[0]
     
-    def read_signed_half_word(self, s):
+    def _read_signed_half_word(self, s):
     
         return struct.unpack("<h", s)[0]
     
-    def str2num(self, size, s):
+    def _str2num(self, size, s):
     
         i = 0
         n = 0
@@ -194,7 +250,7 @@ class ADFSdisc:
         return n
     
     
-    def binary(self, size, n):
+    def _binary(self, size, n):
     
         new = ""
         while (n != 0) & (size > 0):
@@ -213,7 +269,7 @@ class ADFSdisc:
         return new
     
     
-    def identify_format(self, adf):
+    def _identify_format(self, adf):
     
         # Look for a valid disc record when determining whether the disc
         # image represents an 800K D or E format floppy disc. First, the
@@ -225,7 +281,7 @@ class ADFSdisc:
         
         # This will be done again for E format and later discs.
         
-        record = self.read_disc_record(4)
+        record = self._read_disc_record(4)
         
         # Define a checklist of criteria to satisfy.
         checklist = \
@@ -351,7 +407,7 @@ class ADFSdisc:
             return '?'
     
     
-    def read_disc_record(self, offset):
+    def _read_disc_record(self, offset):
     
         # Total sectors per track (sectors * heads)
         log2_sector_size = ord(self.sectors[offset])
@@ -382,14 +438,14 @@ class ADFSdisc:
             density = 'unknown'
         
         # Length of ID fields in the disc map
-        idlen = self.read_unsigned_byte(self.sectors[offset + 4])
+        idlen = self._read_unsigned_byte(self.sectors[offset + 4])
         # Number of bytes per map bit.
-        bytes_per_bit = 2 ** self.read_unsigned_byte(self.sectors[offset + 5])
+        bytes_per_bit = 2 ** self._read_unsigned_byte(self.sectors[offset + 5])
         # LowSector
         # StartUp
         # LinkBits
         # BitSize (size of ID field?)
-        bit_size = self.read_unsigned_byte(self.sectors[offset + 6 : offset + 7])
+        bit_size = self._read_unsigned_byte(self.sectors[offset + 6 : offset + 7])
         #print "Bit size: %s" % hex(bit_size)
         # RASkew
         # BootOpt
@@ -397,14 +453,14 @@ class ADFSdisc:
         zones = ord(self.sectors[offset + 9])
         # ZoneSpare
         # RootDir
-        root = self.str2num(3, self.sectors[offset + 13 : offset + 16]) # was 15
+        root = self._str2num(3, self.sectors[offset + 13 : offset + 16]) # was 15
         # Identify
         # SequenceSides
         # DoubleStep
         # DiscSize
-        disc_size = self.read_unsigned_word(self.sectors[offset + 16 : offset + 20])
+        disc_size = self._read_unsigned_word(self.sectors[offset + 16 : offset + 20])
         # DiscId
-        disc_id   = self.read_unsigned_half_word(self.sectors[offset + 20 : offset + 22])
+        disc_id   = self._read_unsigned_half_word(self.sectors[offset + 20 : offset + 22])
         # DiscName
         disc_name = string.strip(self.sectors[offset + 22 : offset + 32])
         
@@ -415,23 +471,23 @@ class ADFSdisc:
             'disc name': disc_name, 'zones': zones, 'root dir': root }
     
     
-    def read_disc_info(self):
+    def _read_disc_info(self):
     
         checksum = ord(self.sectors[0])
-        first_free = self.read_unsigned_half_word(self.sectors[1:3])
+        first_free = self._read_unsigned_half_word(self.sectors[1:3])
         
         if self.disc_type == 'adE':
         
-            self.record = self.read_disc_record(4)
+            self.record = self._read_disc_record(4)
             
             self.sector_size = self.record["sector size"]
             
             self.map_header = 0
             self.map_start, self.map_end = 0x40, 0x400
-            self.free_space = self.read_free_space(
+            self.free_space = self._read_free_space(
                 self.map_header, self.map_start, self.map_end
                 )
-            self.disc_map = self.read_new_map(
+            self.disc_map = self._read_new_map(
                 self.map_header, self.map_start, self.map_end
                 )
             
@@ -439,16 +495,16 @@ class ADFSdisc:
         
         if self.disc_type == 'adEbig':
         
-            self.record = self.read_disc_record(0xc6804)
+            self.record = self._read_disc_record(0xc6804)
             
             self.sector_size = self.record["sector size"]
             
             self.map_header = 0xc6800
             self.map_start, self.map_end = 0xc6840, 0xc7800
-            self.free_space = self.read_free_space(
+            self.free_space = self._read_free_space(
                 self.map_header, self.map_start, self.map_end
                 )
-            self.disc_map = self.read_new_map(
+            self.disc_map = self._read_new_map(
                 self.map_header, self.map_start, self.map_end
                 )
             
@@ -460,7 +516,7 @@ class ADFSdisc:
     #    zone_size = 819200 / record['zones']
     #    ids_per_zone = zone_size /
     
-    def read_new_map(self, header, begin, end):
+    def _read_new_map(self, header, begin, end):
     
         disc_map = {}
         
@@ -509,7 +565,7 @@ class ADFSdisc:
             
                 # If there is enough space left in this zone to allow
                 # further fragments then read the next two bytes.
-                value = self.read_unsigned_half_word(self.sectors[a:a+2])
+                value = self._read_unsigned_half_word(self.sectors[a:a+2])
                 
                 entry = value & 0x7fff
                 
@@ -548,10 +604,10 @@ class ADFSdisc:
                         # and implicitly finish reading this fragment
                         # (current_piece remains None).
                         
-                        start_addr = self.find_address_from_map(
+                        start_addr = self._find_address_from_map(
                             a, begin, entry
                             )
-                        end_addr = self.find_address_from_map(
+                        end_addr = self._find_address_from_map(
                             next, begin, entry
                             )
                         
@@ -583,10 +639,10 @@ class ADFSdisc:
                     
                     # For relevant entries add the block to the list of
                     # pieces found.
-                    start_addr = self.find_address_from_map(
+                    start_addr = self._find_address_from_map(
                         current_start, begin, current_piece
                         )
-                    end_addr = self.find_address_from_map(
+                    end_addr = self._find_address_from_map(
                         next, begin, current_piece
                         )
                     
@@ -617,7 +673,7 @@ class ADFSdisc:
         
         return disc_map
     
-    def read_free_space(self, header, begin, end):
+    def _read_free_space(self, header, begin, end):
     
         free_space = []
         
@@ -632,7 +688,7 @@ class ADFSdisc:
             
             # Start by reading the offset in bits from the start of the header
             # of the first item of free space in the map.
-            offset = self.read_unsigned_half_word(self.sectors[a:a+2])
+            offset = self._read_unsigned_half_word(self.sectors[a:a+2])
             
             # The top bit is apparently always set, so mask it off and convert
             # the result into bytes. * Not sure if this is the case for
@@ -652,7 +708,7 @@ class ADFSdisc:
             while a < next_zone:
             
                 # Read the offset to the next free fragment in this zone.
-                offset = self.read_unsigned_half_word(self.sectors[a:a+2])
+                offset = self._read_unsigned_half_word(self.sectors[a:a+2])
                 
                 # Convert this to a byte offset.
                 next = ((offset & 0x7fff) >> 3)
@@ -664,7 +720,7 @@ class ADFSdisc:
                 
                     c = b + 1
                     
-                    value = self.read_unsigned_byte(self.sectors[b])
+                    value = self._read_unsigned_byte(self.sectors[b])
                     
                     if (value & 0x80) != 0:
                     
@@ -692,7 +748,7 @@ class ADFSdisc:
         # Return the free space list.
         return free_space
     
-    def find_address_from_map(self, addr, begin, entry):
+    def _find_address_from_map(self, addr, begin, entry):
     
         if self.disc_type == 'adE':
         
@@ -718,7 +774,7 @@ class ADFSdisc:
         
         return address
     
-    def find_in_new_map(self, file_no):
+    def _find_in_new_map(self, file_no):
     
         try:
         
@@ -728,7 +784,7 @@ class ADFSdisc:
         
             return []
     
-    def read_tracks(self, f, inter):
+    def _read_tracks(self, f, inter):
     
         t = ""
         
@@ -773,7 +829,7 @@ class ADFSdisc:
         return t
     
     
-    def read_sectors(self, adf):
+    def _read_sectors(self, adf):
     
         s = []
         try:
@@ -796,7 +852,7 @@ class ADFSdisc:
         return s
     
     
-    def safe(self, s, with_space = 0):
+    def _safe(self, s, with_space = 0):
     
         new = ""
         if with_space == 1:
@@ -819,7 +875,7 @@ class ADFSdisc:
         return new
     
     
-    def read_freespace(self):
+    def _read_freespace(self):
     
         # Currently unused
             
@@ -829,36 +885,36 @@ class ADFSdisc:
         p = 0
         while self.sectors[base+p] != 0:
     
-            free.append(self.str2num(3, self.sectors[base+p:base_p+3]))
+            free.append(self._str2num(3, self.sectors[base+p:base+p+3]))
     
         name = self.sectors[self.sector_size-9:self.sector_size-4]
     
-        disc_size = self.str2num(
+        disc_size = self._str2num(
             3, self.sectors[self.sector_size-4:self.sector_size-1]
             )
     
-        checksum0 = self.read_unsigned_byte(self.sectors[self.sector_size-1])
+        checksum0 = self._read_unsigned_byte(self.sectors[self.sector_size-1])
     
         base = self.sector_size
     
         p = 0
         while self.sectors[base+p] != 0:
     
-            free.append(self.str2num(3, self.sectors[base+p:base_p+3]))
+            free.append(self._str2num(3, self.sectors[base+p:base+p+3]))
     
         name = name + \
             self.sectors[base+self.sector_size-10:base+self.sector_size-5]
     
-        disc_id = self.str2num(
+        disc_id = self._str2num(
             2, self.sectors[base+self.sector_size-5:base+self.sector_size-3]
             )
     
-        boot = self.read_unsigned_byte(self.sectors[base+self.sector_size-3])
+        boot = self._read_unsigned_byte(self.sectors[base+self.sector_size-3])
     
-        checksum1 = self.read_unsigned_byte(self.sectors[base+self.sector_size-1])
+        checksum1 = self._read_unsigned_byte(self.sectors[base+self.sector_size-1])
     
     
-    def read_old_catalogue(self, base):
+    def _read_old_catalogue(self, base):
     
         head = base
     #    base = sector_size*2
@@ -890,28 +946,28 @@ class ADFSdisc:
                     top_set = counter
                 counter = counter + 1
             
-            name = self.safe(self.sectors[head+p:head+p+10])
+            name = self._safe(self.sectors[head+p:head+p+10])
             
-            load = self.read_unsigned_word(self.sectors[head+p+10:head+p+14])
-            exe = self.read_unsigned_word(self.sectors[head+p+14:head+p+18])
-            length = self.read_unsigned_word(self.sectors[head+p+18:head+p+22])
+            load = self._read_unsigned_word(self.sectors[head+p+10:head+p+14])
+            exe = self._read_unsigned_word(self.sectors[head+p+14:head+p+18])
+            length = self._read_unsigned_word(self.sectors[head+p+18:head+p+22])
             
             if self.disc_type == 'adD':
-                inddiscadd = 256 * self.str2num(
+                inddiscadd = 256 * self._str2num(
                     3, self.sectors[head+p+22:head+p+25]
                     )
             else:
-                inddiscadd = self.sector_size * self.str2num(
+                inddiscadd = self.sector_size * self._str2num(
                     3, self.sectors[head+p+22:head+p+25]
                     )
             
-            olddirobseq = self.read_unsigned_byte(self.sectors[head+p+25])
+            olddirobseq = self._read_unsigned_byte(self.sectors[head+p+25])
             
             #print string.expandtabs(
             #   "%s\t%s\t%s\t%s" % (
-            #       name, "("+self.binary(8, olddirobseq)+")",
-            #       "("+self.binary(8, load)+")",
-            #       "("+self.binary(8, exe)+")"
+            #       name, "("+self._binary(8, olddirobseq)+")",
+            #       "("+self._binary(8, load)+")",
+            #       "("+self._binary(8, exe)+")"
             #   ) )
             #print string.expandtabs(
             #   "%s\t%02x\t%08x\t%08x" % (
@@ -926,17 +982,15 @@ class ADFSdisc:
                 
                     # A directory has been found.
                     lower_dir_name, lower_files = \
-                        self.read_old_catalogue(inddiscadd)
+                        self._read_old_catalogue(inddiscadd)
                         
-                    files.append([name, lower_files])
+                    files.append(ADFSdirectory(name, lower_files))
                 
                 else:
                 
                     # A file has been found.
-                    files.append(
-                        [ name, self.sectors[inddiscadd:inddiscadd+length],
-                          load, exe, length ]
-                        )
+                    data = self.sectors[inddiscadd:inddiscadd+length]
+                    files.append(ADFSfile(name, data, load, exe, length))
             
             else:
             
@@ -947,17 +1001,15 @@ class ADFSdisc:
                 
                     # A directory has been found.
                     lower_dir_name, lower_files = \
-                        self.read_old_catalogue(inddiscadd)
+                        self._read_old_catalogue(inddiscadd)
                     
-                    files.append([name, lower_files])
+                    files.append(ADFSdirectory(name, lower_files))
                 
                 else:
                 
                     # A file has been found.
-                    files.append(
-                        [ name, self.sectors[inddiscadd:inddiscadd+length],
-                          load, exe, length ]
-                        )
+                    data = self.sectors[inddiscadd:inddiscadd+length]
+                    files.append(ADFSfile(name, data, load, exe, length))
             
             p = p + 26
         
@@ -985,11 +1037,11 @@ class ADFSdisc:
         # Read the directory name, its parent and any title given.
         if self.disc_type == 'adD':
         
-            dir_name = self.safe(
+            dir_name = self._safe(
                 self.sectors[tail+self.sector_size-16:tail+self.sector_size-6]
                 )
             
-            parent = 256*self.str2num(
+            parent = 256*self._str2num(
                 3,
                 self.sectors[tail+self.sector_size-38:tail+self.sector_size-35]
                 )
@@ -998,16 +1050,16 @@ class ADFSdisc:
                 self.sectors[tail+self.sector_size-35:tail+self.sector_size-16]
         else:
         
-            dir_name = self.safe(
+            dir_name = self._safe(
                 self.sectors[tail+self.sector_size-52:tail+self.sector_size-42]
                 )
             
-            parent = self.sector_size*self.str2num(
+            parent = self.sector_size*self._str2num(
                 3,
                 self.sectors[tail+self.sector_size-42:tail+self.sector_size-39]
                 )
             
-            dir_title = self.safe(
+            dir_title = self._safe(
                 self.sectors[tail+self.sector_size-39:tail+self.sector_size-20]
                 )
         
@@ -1016,7 +1068,7 @@ class ADFSdisc:
             # Use the directory title as the disc name.
             
             # Note that the title may contain spaces.
-            self.disc_name = self.safe(dir_title, with_space = 1)
+            self.disc_name = self._safe(dir_title, with_space = 1)
         
         #print "Directory title", dir_title
         #print "Directory name ", dir_name
@@ -1037,11 +1089,11 @@ class ADFSdisc:
         return dir_name, files
     
     
-    def read_new_address(self, s):
+    def _read_new_address(self, s):
     
         # From the three character string passed, determine the address on the
         # disc.
-        value = self.str2num(3, s)
+        value = self._str2num(3, s)
         
         # This is a SIN (System Internal Number)
         # The bottom 8 bits are the sector offset + 1
@@ -1059,8 +1111,8 @@ class ADFSdisc:
         
         # The pieces of the object are returned as a list of pairs of
         # addresses.
-        #pieces = self.find_in_new_map(self.map_start, self.map_end, file_no)
-        pieces = self.find_in_new_map(file_no)
+        #pieces = self._find_in_new_map(self.map_start, self.map_end, file_no)
+        pieces = self._find_in_new_map(file_no)
         
         #print map(lambda x: map(hex, x), pieces)
         
@@ -1076,7 +1128,7 @@ class ADFSdisc:
         return pieces
     
     
-    def read_new_catalogue(self, base):
+    def _read_new_catalogue(self, base):
     
         head = base
         p = 0
@@ -1110,22 +1162,22 @@ class ADFSdisc:
                     top_set = counter
                 counter = counter + 1
             
-            name = self.safe(self.sectors[head+p:head+p+10])
+            name = self._safe(self.sectors[head+p:head+p+10])
             
             #print hex(head+p), name
             
-            load = self.read_unsigned_word(self.sectors[head+p+10:head+p+14])
-            exe = self.read_unsigned_word(self.sectors[head+p+14:head+p+18])
-            length = self.read_unsigned_word(self.sectors[head+p+18:head+p+22])
+            load = self._read_unsigned_word(self.sectors[head+p+10:head+p+14])
+            exe = self._read_unsigned_word(self.sectors[head+p+14:head+p+18])
+            length = self._read_unsigned_word(self.sectors[head+p+18:head+p+22])
             
             #print hex(ord(self.sectors[head+p+22])), \
             #        hex(ord(self.sectors[head+p+23])), \
             #        hex(ord(self.sectors[head+p+24]))
             
-            inddiscadd = self.read_new_address(
+            inddiscadd = self._read_new_address(
                 self.sectors[head+p+22:head+p+25]
                 )
-            newdiratts = self.read_unsigned_byte(self.sectors[head+p+25])
+            newdiratts = self._read_unsigned_byte(self.sectors[head+p+25])
             
             if inddiscadd == -1:
             
@@ -1141,7 +1193,7 @@ class ADFSdisc:
                             )
                         self.verify_log.append( (
                             WARNING, "    file details: %x" % \
-                            self.str2num(3, self.sectors[head+p+22:head+p+25])
+                            self._str2num(3, self.sectors[head+p+22:head+p+25])
                             ) )
                         self.verify_log.append(
                             (WARNING, "    atts: %x" % newdiratts)
@@ -1160,7 +1212,7 @@ class ADFSdisc:
                         self.verify_log.append( (
                             WARNING,
                             "    file details: %x" % \
-                            self.str2num(3, self.sectors[head+p+22:head+p+25])
+                            self._str2num(3, self.sectors[head+p+22:head+p+25])
                             ) )
                         self.verify_log.append(
                             (WARNING, "    atts: %x" % newdiratts)
@@ -1170,7 +1222,7 @@ class ADFSdisc:
                 
                     # Store a zero length file. This appears to be the
                     # standard behaviour for storing empty files.
-                    files.append([name, "", load, exe, length])
+                    files.append(ADFSfile(name, "", load, exe, length))
                     
                     #print hex(head+p), hex(head+p+22)
             
@@ -1200,10 +1252,10 @@ class ADFSdisc:
                         # as a directory.
                         
                         lower_dir_name, lower_files = \
-                            self.read_new_catalogue(start)
+                            self._read_new_catalogue(start)
                         
                         # Store the directory name and file found therein.
-                        files.append([name, lower_files])
+                        files.append(ADFSdirectory(name, lower_files))
                 
                 else:
                 
@@ -1223,7 +1275,7 @@ class ADFSdisc:
                         file = file + self.sectors[start : (start + amount)]
                         remaining = remaining - amount
                     
-                    files.append([name, file, load, exe, length])
+                    files.append(ADFSfile(name, file, load, exe, length))
             
             p = p + 26
         
@@ -1246,11 +1298,11 @@ class ADFSdisc:
             
             return '', files
         
-        dir_name = self.safe(
+        dir_name = self._safe(
             self.sectors[tail+self.sector_size-16:tail+self.sector_size-6]
             )
         
-        #parent = self.read_new_address(
+        #parent = self._read_new_address(
         #    self.sectors[tail+self.sector_size-38:tail+self.sector_size-35], dir = 1
         #    )
         #print "This directory:", hex(head), "Parent:", hex(parent)
@@ -1258,7 +1310,7 @@ class ADFSdisc:
         parent = \
             self.sectors[tail+self.sector_size-38:tail+self.sector_size-35]
         
-        #256*self.str2num(
+        #256*self._str2num(
         #   3, self.sectors[tail+self.sector_size-38:tail+self.sector_size-35]
         #)
         
@@ -1289,8 +1341,10 @@ class ADFSdisc:
         return dir_name, files
     
     
-    def read_leafname(self, path):
+    def _read_leafname(self, path):
     
+        # Unused
+        
         pos = string.rfind(path, os.sep)
         if pos != -1:
             return path[pos+1:]
@@ -1298,9 +1352,28 @@ class ADFSdisc:
             return path
     
     
-    def print_catalogue(self, files = None, path = "$", filetypes = 0,
-                        separator = ","):
+    def print_catalogue(self, files = None, path = "$", filetypes = 0):
     
+        """print_catalogue(self, files = None, path = "$", filetypes = 0)
+        
+        Prints the contents of the disc catalogue to standard output.
+        Usually, this method is called without specifying any of the keyword
+        arguments, but these can be used to customise the output.
+        
+        If files is None, the contents of the entire disc will be shown.
+        A subset of the list of files obtained from the instance's files
+        attribute can be passed if only a subset of the catalogue needs to
+        be displayed.
+        
+        The path parameter specifies the representation of the root directory
+        in the output. By default, root directories are represented by the
+        familiar "$" symbol.
+        
+        If filetypes is set to True or a non-False value, the file types of
+        each file will be displayed; otherwise, load and execution addresses
+        will be displayed instead.
+        """
+        
         if files is None:
         
             files = self.files
@@ -1309,19 +1382,18 @@ class ADFSdisc:
         
             print path, "(empty)"
         
-        for i in files:
+        for obj in files:
     
-            name = i[0]
-            if type(i[1]) != type([]):
+            name = obj.name
+            if isinstance(obj, ADFSfile):
             
-                load, exec_addr, length = i[2], i[3], i[4]
-                
-                if filetypes == 0:
+                if not filetypes:
                 
                     # Load and execution addresses treated as valid.
                     print string.expandtabs(
                         "%s.%s\t%X\t%X\t%X" % (
-                            path, name, load, exec_addr, length
+                            path, name, obj.load_address,
+                            obj.execution_address, obj.length
                             ), 16
                         )
                 
@@ -1329,17 +1401,17 @@ class ADFSdisc:
                 
                     # Load address treated as a filetype.
                     print string.expandtabs(
-                        "%s.%s\t%X\t%X" % (
-                            path, name, ((load >> 8) & 0xfff), length
+                        "%s.%s\t%s\t%X" % (
+                            path, name, obj.filetype().upper(), obj.length
                             ), 16
                         )
             
             else:
             
-                self.print_catalogue(i[1], path + "." + name, filetypes)
+                self.print_catalogue(obj.files, path + "." + name, filetypes)
     
     
-    def convert_name(self, old_name, convert_dict):
+    def _convert_name(self, old_name, convert_dict):
     
         # Use the conversion dictionary to convert any forbidden
         # characters to accepted local substitutes.
@@ -1364,10 +1436,10 @@ class ADFSdisc:
         
         return name
     
-    def extract_old_files(self, l, path, filetypes = 0, separator = ",",
-                          convert_dict = {}):
+    def _extract_old_files(self, objects, path, filetypes = 0, separator = ",",
+                           convert_dict = {}):
     
-        new_path = self.create_directory(path)
+        new_path = self._create_directory(path)
         
         if new_path != "":
         
@@ -1377,18 +1449,17 @@ class ADFSdisc:
         
             return
         
-        for i in l:
+        for obj in objects:
         
-            old_name = i[0]
+            old_name = obj.name
             
-            name = self.convert_name(old_name, convert_dict)
+            name = self._convert_name(old_name, convert_dict)
             
-            if type(i[1]) != type([]):
+            if isinstance(obj, ADFSfile):
             
                 # A file.
-                load, exec_addr, length = i[2], i[3], i[4]
                 
-                if filetypes == 0:
+                if not filetypes:
                 
                     # Load and execution addresses assumed to be valid.
                     
@@ -1398,16 +1469,17 @@ class ADFSdisc:
                     
                     try:
                         out = open(out_file, "wb")
-                        out.write(i[1])
+                        out.write(obj.data)
                         out.close()
                     except IOError:
                         print "Couldn't open the file: %s" % out_file
                     
                     try:
                         inf = open(inf_file, "w")
-                        load, exec_addr, length = i[2], i[3], i[4]
-                        inf.write( "$.%s\t%X\t%X\t%X" % \
-                                   ( name, load, exec_addr, length ) )
+                        inf.write("$.%s\t%X\t%X\t%X" % (
+                            name, obj.load_address, obj.execution_address,
+                            obj.length
+                            ))
                         inf.close()
                     except IOError:
                         print "Couldn't open the file: %s" % inf_file
@@ -1415,12 +1487,11 @@ class ADFSdisc:
                 else:
                 
                     # Interpret the load address as a filetype.
-                    out_file = os.path.join(path, name) + separator + "%x" % \
-                               ((load >> 8) & 0xfff)
+                    out_file = os.path.join(path, name) + separator + obj.filetype()
                     
                     try:
                         out = open(out_file, "wb")
-                        out.write(i[1])
+                        out.write(obj.data)
                         out.close()
                     except IOError:
                         print "Couldn't open the file: %s" % out_file
@@ -1428,15 +1499,15 @@ class ADFSdisc:
             
                 new_path = os.path.join(path, name)
                 
-                self.extract_old_files(
-                    i[1], new_path, filetypes, separator, convert_dict
+                self._extract_old_files(
+                    obj.files, new_path, filetypes, separator, convert_dict
                     )
     
     
-    def extract_new_files(self, l, path, filetypes = 0, separator = ",",
-                          convert_dict = {}):
+    def _extract_new_files(self, objects, path, filetypes = 0, separator = ",",
+                           convert_dict = {}):
     
-        new_path = self.create_directory(path)
+        new_path = self._create_directory(path)
         
         if new_path != "":
         
@@ -1446,20 +1517,19 @@ class ADFSdisc:
         
             return
         
-        for i in l:
+        for obj in objects:
         
-            old_name = i[0]
+            old_name = obj.name
             
             # Use the conversion dictionary to convert any forbidden
             # characters to accepted local substitutes.
-            name = self.convert_name(old_name, convert_dict)
+            name = self._convert_name(old_name, convert_dict)
             
-            if type(i[1]) != type([]):
+            if isinstance(obj, ADFSfile):
             
                 # A file.
-                load, exec_addr, length = i[2], i[3], i[4]
                 
-                if filetypes == 0:
+                if not filetypes:
                 
                     # Load and execution addresses assumed to be valid.
                     
@@ -1469,28 +1539,28 @@ class ADFSdisc:
                     
                     try:
                         out = open(out_file, "wb")
-                        out.write(i[1])
+                        out.write(obj.data)
                         out.close()
                     except IOError:
                         print "Couldn't open the file: %s" % out_file
                     
                     try:
                         inf = open(inf_file, "w")
-                        load, exec_addr, length = i[2], i[3], i[4]
-                        inf.write( "$.%s\t%X\t%X\t%X" % \
-                                   ( name, load, exec_addr, length ) )
+                        inf.write("$.%s\t%X\t%X\t%X" % (
+                            name, obj.load_address, obj.execution_address,
+                            obj.length
+                            ))
                         inf.close()
                     except IOError:
                         print "Couldn't open the file: %s" % inf_file
                 else:
                 
                     # Interpret the load address as a filetype.
-                    out_file = path + os.sep + name + separator + "%x" % \
-                               ((load >> 8) & 0xfff)
+                    out_file = path + os.sep + name + separator + obj.filetype()
                     
                     try:
                         out = open(out_file, "wb")
-                        out.write(i[1])
+                        out.write(obj.data)
                         out.close()
                     except IOError:
                         print "Couldn't open the file: %s" % out_file
@@ -1498,43 +1568,62 @@ class ADFSdisc:
             
                 new_path = os.path.join(path, name)
                 
-                self.extract_new_files(
-                    i[1], new_path, filetypes, separator, convert_dict
+                self._extract_new_files(
+                    obj.files, new_path, filetypes, separator, convert_dict
                     )
     
     
     def extract_files(self, out_path, files = None, filetypes = 0,
                       separator = ",", convert_dict = {}):
     
+        """extract_files(self, out_path, files = None, filetypes = 0,
+                         separator = ",", convert_dict = {})
+        
+        Extracts the files stored in the disc image into a directory structure
+        stored on the path specified by out_path.
+        
+        The files parameter specified a list of ADFSfile or ADFSdirectory
+        instances to extract to the target file system. This keyword argument
+        can be omitted if all files and directories in the disc image are to
+        be extracted.
+        
+        If the filetypes keyword argument is set to True, or another non-False
+        value, file type suffixes are appended to each file created using the
+        separator string supplied to join the file name to the file type.
+        
+        The convert_dict parameter can be used to specify a mapping between
+        characters used in ADFS file names and those on the target file system.
+        """
+        
         if files is None:
         
             files = self.files
         
         if self.disc_type == 'adD':
         
-            self.extract_old_files(
+            self._extract_old_files(
                 files, out_path, filetypes, separator, convert_dict
                 )
         
         elif self.disc_type == 'adE':
         
-            self.extract_new_files(
+            self._extract_new_files(
                 files, out_path, filetypes, separator, convert_dict
                 )
         
         elif self.disc_type == 'adEbig':
         
-            self.extract_new_files(
+            self._extract_new_files(
                 files, out_path, filetypes, separator, convert_dict
                 )
         
         else:
         
-            self.extract_old_files(
+            self._extract_old_files(
                 files, out_path, filetypes, separator, convert_dict
                 )
     
-    def create_directory(self, path, name = None):
+    def _create_directory(self, path, name = None):
     
         elements = []
         
@@ -1589,9 +1678,9 @@ class ADFSdisc:
         # Success
         return built
     
-    def plural(self, msg, values, words):
+    def _plural(self, msg, values, words):
     
-        """message = plural(self, msg, values, words)
+        """message = _plural(self, msg, values, words)
         
         Return a message which takes into account the plural form of
         words in the original message, assuming that the appropriate
@@ -1634,7 +1723,7 @@ class ADFSdisc:
         
         if hasattr(self, "disc_map") and self.disc_map.has_key(1):
         
-            print self.plural(
+            print self._plural(
                 "%i mapped %s found.", [len(self.disc_map[1])],
                 [("defects", "defect", "defects")]
                 )

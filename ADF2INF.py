@@ -3,13 +3,13 @@
 Name        : ADF2INF.py
 Author      : David Boddie
 Created     : Wed 18th October 2000
-Updated     : Mon 21st July 2003
+Updated     : Sun 8th June 2008
 Purpose     : Convert ADFS disc images (ADF) to INF files
 WWW         : http://david.boddie.org.uk/Projects/Python/ADFSlib
 
 License:
 
-Copyright (c) 2000-2003, David Boddie
+Copyright (c) 2000-2008, David Boddie
 
 This software is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License as
@@ -172,9 +172,13 @@ if __name__ == "__main__":
         print 'name into which the contents of the disc will be written.'
         print
         print "The -t flag causes the load and execution addresses of files to be"
-        print "interpreted as filetype information for files created on RISC OS."
+        print "interpreted as file type information for files created on RISC OS."
         print "A separator used to append a suffix onto the file is optional and"
-        print "defaults to the standard period character. e.g. myfile.fff"
+        print "defaults to the standard period character; e.g. myfile.fff"
+        print
+        print "The -s flag is used to specify the character which joins the file"
+        print "name to the file type. This can only be specified when extracting"
+        print "files from a disc image."
         print
         print "The -v flag causes the disc image to be checked for simple defects and"
         print "determines whether there are files and directories which cannot be"
@@ -285,9 +289,7 @@ if __name__ == "__main__":
         print 'Contents of', adfsdisc.disc_name,':'
         print
         
-        adfsdisc.print_catalogue(
-            adfsdisc.files, adfsdisc.root_name, filetypes, separator
-            )
+        adfsdisc.print_catalogue(adfsdisc.files, adfsdisc.root_name, filetypes)
         
         print
         
