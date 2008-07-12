@@ -1477,7 +1477,7 @@ class ADFSdisc:
         return name
     
     def _extract_old_files(self, objects, path, filetypes = 0, separator = ",",
-                           convert_dict = {}):
+                           convert_dict = {}, with_time_stamps = False):
     
         new_path = self._create_directory(path)
         
@@ -1545,7 +1545,7 @@ class ADFSdisc:
     
     
     def _extract_new_files(self, objects, path, filetypes = 0, separator = ",",
-                           convert_dict = {}):
+                           convert_dict = {}, with_time_stamps = False):
     
         new_path = self._create_directory(path)
         
@@ -1614,10 +1614,12 @@ class ADFSdisc:
     
     
     def extract_files(self, out_path, files = None, filetypes = 0,
-                      separator = ",", convert_dict = {}):
+                      separator = ",", convert_dict = {},
+                      with_time_stamps = False):
     
         """extract_files(self, out_path, files = None, filetypes = 0,
-                         separator = ",", convert_dict = {})
+                         separator = ",", convert_dict = {},
+                         with_time_stamps = False)
         
         Extracts the files stored in the disc image into a directory structure
         stored on the path specified by out_path.
@@ -1633,6 +1635,9 @@ class ADFSdisc:
         
         The convert_dict parameter can be used to specify a mapping between
         characters used in ADFS file names and those on the target file system.
+        
+        If with_time_stamps is set, each extracted file will be given the time
+        stamp on the target file system that it has in the disc image.
         """
         
         if files is None:
@@ -1642,25 +1647,29 @@ class ADFSdisc:
         if self.disc_type == 'adD':
         
             self._extract_old_files(
-                files, out_path, filetypes, separator, convert_dict
+                files, out_path, filetypes, separator, convert_dict,
+                with_time_stamps
                 )
         
         elif self.disc_type == 'adE':
         
             self._extract_new_files(
-                files, out_path, filetypes, separator, convert_dict
+                files, out_path, filetypes, separator, convert_dict,
+                with_time_stamps
                 )
         
         elif self.disc_type == 'adEbig':
         
             self._extract_new_files(
-                files, out_path, filetypes, separator, convert_dict
+                files, out_path, filetypes, separator, convert_dict,
+                with_time_stamps
                 )
         
         else:
         
             self._extract_old_files(
-                files, out_path, filetypes, separator, convert_dict
+                files, out_path, filetypes, separator, convert_dict,
+                with_time_stamps
                 )
     
     def _create_directory(self, path, name = None):
