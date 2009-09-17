@@ -1,8 +1,6 @@
 #! /usr/bin/env python
 """
-ADFSlib.py
-
-A library for reading ADFS disc images.
+ADFSlib.py, a library for reading ADFS disc images.
 
 Copyright (c) 2003-2008, David Boddie
 
@@ -682,7 +680,7 @@ class ADFSdisc:
                 
                     # The byte found was unexpected - backtrack to the
                     # byte after the start of this block and try again.
-                    print "Backtrack from %s to %s" % (hex(a), hex(current_start+1))
+                    #print "Backtrack from %s to %s" % (hex(a), hex(current_start+1))
                     
                     next = current_start + 1
                     current_piece = None
@@ -1763,9 +1761,9 @@ class ADFSdisc:
     def print_log(self, verbose = 0):
     
         """print_log(self, verbose = 0)
-        \r
-        \rPrint the disc verification log. Any purely informational messages
-        \rare only printed is verbose is set to 1.
+        
+        Print the disc verification log. Any purely informational messages
+        are only printed if verbose is set to 1.
         """
         
         if hasattr(self, "disc_map") and self.disc_map.has_key(1):
