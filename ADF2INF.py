@@ -3,9 +3,9 @@
 Name        : ADF2INF.py
 Author      : David Boddie
 Created     : Wed 18th October 2000
-Updated     : Sun 8th June 2008
+Updated     : Sat 21st August 2010
 Purpose     : Convert ADFS disc images (ADF) to INF files
-WWW         : http://david.boddie.org.uk/Projects/Python/ADFSlib
+WWW         : http://www.boddie.org.uk/david/Projects/Python/ADFSlib
 
 License:
 

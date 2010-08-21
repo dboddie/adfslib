@@ -19,8 +19,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 __author__ = "David Boddie <david@boddie.org.uk>"
-__date__ = "Sun 12th July 2008"
-__version__ = "0.40"
+__date__ = "Sat 21st August 2010"
+__version__ = "0.41"
 __license__ = "GNU General Public License (version 3)"
 
 

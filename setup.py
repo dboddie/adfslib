@@ -12,18 +12,11 @@ except ImportError:
     print "Information:"
     print
     print "The cmdsyntax module is not installed. The ADF2INF.py utility"
-    print "will use getopt for its argument handling."
+    print "will use getopt for its argument handling. You can install"
+    print "cmdsyntax later if you want."
     print
     print "See http://www.boddie.org.uk/david/Projects/Python/CMDSyntax"
     print "for details of how to obtain the cmdsyntax module."
-    print
-    q = raw_input(
-        "Do you wish to continue installing? [yes]/no:"
-        )
-    
-    if q != "yes" and q != "":
-    
-        sys.exit()
 
 
 import ADFSlib
