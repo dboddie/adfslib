@@ -2,7 +2,7 @@
 """
 ADFSlib.py, a library for reading ADFS disc images.
 
-Copyright (c) 2003-2008, David Boddie
+Copyright (c) 2003-2010, David Boddie
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -137,6 +137,7 @@ class ADFSdisc:
             self.sector_size = 256
             interleave = 0
             self.disc_type = 'adf'
+            self.dir_markers = ('Hugo',)
         
         #if string.lower(adf_file[-4:])==(suffix+"adf"):
         elif length == 327680:
@@ -145,6 +146,7 @@ class ADFSdisc:
             self.sector_size = 256
             interleave = 0
             self.disc_type = 'adf'
+            self.dir_markers = ('Hugo',)
         
         #elif string.lower(adf_file[-4:])==(suffix+"adl"):
         elif length == 655360:
@@ -155,6 +157,7 @@ class ADFSdisc:
             # ~/Private/ADFS/LFormat.htm).
             interleave = 1
             self.disc_type = 'adl'
+            self.dir_markers = ('Hugo',)
         
         elif length == 819200:
         
@@ -162,6 +165,7 @@ class ADFSdisc:
             self.nsectors = 10
             self.sector_size = 1024
             interleave = 0
+            self.dir_markers = ('Hugo', 'Nick')
             
             format = self._identify_format(adf)
             
@@ -184,6 +188,7 @@ class ADFSdisc:
             self.sector_size = 1024
             interleave = 0
             self.disc_type = 'adEbig'
+            self.dir_markers = ('Nick',)
         
         else:
             raise ADFS_exception, 'Please supply a .adf, .adl or .adD file.'
@@ -398,6 +403,18 @@ class ADFSdisc:
                 self.verify_log.append(
                     ( INFORM,
                       "Found directory in typical place for the root " + \
+                      "directory of a D format disc." )
+                    )
+            
+            return 'D'
+        
+        elif word1 == 'Nick':
+        
+            if self.verify:
+            
+                self.verify_log.append(
+                    ( INFORM,
+                      "Found E-style directory in typical place for the root " + \
                       "directory of a D format disc." )
                     )
             
@@ -943,7 +960,7 @@ class ADFSdisc:
         
         dir_seq = self.sectors[head + p]
         dir_start = self.sectors[head+p+1:head+p+5]
-        if dir_start != 'Hugo':
+        if dir_start not in self.dir_markers:
         
             if self.verify:
             
@@ -1043,7 +1060,7 @@ class ADFSdisc:
             tail = head + (self.sector_size*4)    # 1024 bytes
         
         dir_end = self.sectors[tail+self.sector_size-5:tail+self.sector_size-1]
-        if dir_end != 'Hugo':
+        if dir_end not in self.dir_markers:
         
             if self.verify:
             
@@ -1158,7 +1175,7 @@ class ADFSdisc:
         
         dir_seq = self.sectors[head + p]
         dir_start = self.sectors[head+p+1:head+p+5]
-        if dir_start != 'Nick':
+        if dir_start not in self.dir_markers:
         
             if self.verify:
             
@@ -1307,7 +1324,7 @@ class ADFSdisc:
         
         dir_end = self.sectors[tail+self.sector_size-5:tail+self.sector_size-1]
         
-        if dir_end != 'Nick':
+        if dir_end not in self.dir_markers:
         
             if self.verify:
             
