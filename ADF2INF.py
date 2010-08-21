@@ -9,23 +9,20 @@ WWW         : http://david.boddie.org.uk/Projects/Python/ADFSlib
 
 License:
 
-Copyright (c) 2000-2008, David Boddie
+Copyright (c) 2000-2010, David Boddie
 
-This software is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License as
-published by the Free Software Foundation; either version 2 of
-the License, or (at your option) any later version.
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-This software is distributed in the hope that it will be useful,
+This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public
-License along with this library; see the file COPYING
-If not, write to the Free Software Foundation, Inc.,
-59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
-
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 
@@ -140,6 +137,7 @@ if __name__ == "__main__":
         \r( [-d | --create-directory]
         \r  [ (-t | --file-types) [(-s separator) | --separator=character] ]
         \r  [(-c convert) | --convert=characters]
+        \r  [-m | --time-stamps]
         \r  <ADF file> <destination path> ) |
         \r
         \r( (-v | --verify) <ADF file> ) |
@@ -151,7 +149,7 @@ if __name__ == "__main__":
     
     else:
     
-        syntax = "[-l] [-d] [-t] [-s separator] [-v] [-c characters] " + \
+        syntax = "[-l] [-d] [-t] [-s separator] [-v] [-c characters] [-m] " + \
                  "<ADF file> <destination path>"
         match = read_getopt_input(sys.argv)
     
@@ -196,6 +194,9 @@ if __name__ == "__main__":
         print
         print "    %s" % repr(default_convert_dict)
         print
+        print "The -m flag determines whether the files extracted from the disc"
+        print "image should retain their time stamps on the target system."
+        print
         sys.exit()
     
     
@@ -207,6 +208,7 @@ if __name__ == "__main__":
     use_separator = match.has_key("s") or match.has_key("separator")
     verify = match.has_key("v") or match.has_key("verify")
     convert = match.has_key("c") or match.has_key("convert")
+    with_time_stamps = match.has_key("m") or match.has_key("time-stamps")
     
     adf_file = match["ADF file"]
     
@@ -333,7 +335,8 @@ if __name__ == "__main__":
     
     # Extract the files
     adfsdisc.extract_files(
-        out_path, adfsdisc.files, filetypes, separator, convert_dict
+        out_path, adfsdisc.files, filetypes, separator, convert_dict,
+        with_time_stamps
         )
     
     # Exit
