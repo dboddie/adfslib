@@ -32,7 +32,7 @@ except ImportError:
     use_getopt = 1
 
 
-__version__ = "0.41 (Sat 21st August 2010)"
+__version__ = "0.42 (Sun 29th August 2010)"
 
 default_convert_dict = {"/": "."}
 

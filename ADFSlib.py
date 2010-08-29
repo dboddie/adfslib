@@ -20,8 +20,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 __author__ = "David Boddie <david@boddie.org.uk>"
-__date__ = "Sat 21st August 2010"
-__version__ = "0.41"
+__date__ = "Sun 29th August 2010"
+__version__ = "0.42"
 __license__ = "GNU General Public License (version 3)"
 
 
