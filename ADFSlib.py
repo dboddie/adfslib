@@ -1,4 +1,5 @@
 #! /usr/bin/env python
+
 """
 ADFSlib.py, a library for reading ADFS disc images.
 

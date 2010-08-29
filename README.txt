@@ -40,3 +40,11 @@ Install ADFSlib and ADF2INF (as root) by typing
   python setup.py install
 
 or just use them from the directory in which you unpack them.
+
+
+History
+
+Name        : ADF2INF.py
+Author      : David Boddie
+Created     : Wed 18th October 2000
+Purpose     : Convert ADFS disc images (ADF) to INF files
