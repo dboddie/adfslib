@@ -83,7 +83,7 @@ class ADFSfile:
     
     def filetype(self):
     
-        return "%x" % ((self.load_address >> 8) & 0xfff)
+        return "%03x" % ((self.load_address >> 8) & 0xfff)
     
     def time_stamp(self):
     
