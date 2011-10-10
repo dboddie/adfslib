@@ -43,9 +43,10 @@ class ADFS_exception(Exception):
 
 class ADFSdirectory:
 
-    """ADFSdirectory
+    """directory = ADFSdirectory(name, files)
     
-    directory = ADFSdirectory(name, files)
+    The directory created contains name and files attributes containing the
+    directory name and the objects it contains.
     """
     
     def __init__(self, name, files):
@@ -60,9 +61,7 @@ class ADFSdirectory:
 
 class ADFSfile:
 
-    """ADFSfile
-    
-    file = ADFSfile(name, data, load_address, execution_address, length)
+    """file = ADFSfile(name, data, load_address, execution_address, length)
     """
     
     def __init__(self, name, data, load_address, execution_address, length):
@@ -79,14 +78,24 @@ class ADFSfile:
     
     def has_filetype(self):
     
+        """Returns True if the file's meta-data contains filetype information."""
         return self.load_address & 0xfff00000 == 0xfff00000
     
     def filetype(self):
     
+        """Returns the meta-data containing the filetype information.
+        
+        Note that a filetype can be obtained for all files, though it may not
+        necessarily be valid. Use has_filetype() to determine whether the file
+        is likely to have a valid filetype."""
+        
         return "%03x" % ((self.load_address >> 8) & 0xfff)
     
     def time_stamp(self):
     
+        """Returns the time stamp for the file as a tuple of values containing
+        the local time, or an empty tuple if the file does not have a time stamp."""
+        
         # RISC OS time is given as a five byte block containing the
         # number of centiseconds since 1900 (presumably 1st January 1900).
         
@@ -106,9 +115,7 @@ class ADFSfile:
 
 class ADFSdisc:
 
-    """ADFSdisc
-    
-    disc = ADFSdisc(file_handle, verify = 0)
+    """disc = ADFSdisc(file_handle, verify = 0)
     
     Represents an ADFS disc image stored in the file with the specified file
     handle. The image is not verified by default; pass True or another
@@ -117,9 +124,30 @@ class ADFSdisc:
     If the disc image specified cannot be read successfully, an ADFS_exception
     is raised.
     
+    The disc's name is recorded in the disc_name attribute; its type is
+    recorded in the disc_type attribute. To obtain a human-readable description
+    of the disc format call the disc_format() method.
+    
     Once an ADFSdisc instance has been created, it can be used to access the
-    contents of the disc image. The files attribute contains
+    contents of the disc image. The files attribute contains a list of objects
+    from the disc's catalogue, including both directories and files,
+    represented by ADFSdirectory and ADFSfile instances respectively.
+    
+    The contents of the disc can be extracted to a directory structure in the
+    user's filing system with the extract_files() method.
+    
+    For debugging purposes, the print_catalogue() method prints the contents of
+    the disc's catalogue to the console. Similarly, the print_log() method
+    prints the disc verification log and can be used to show any disc errors
+    that have been found.
     """
+    
+    _format_names = {"ads": "ADFS S format",
+                     "adm": "ADFS M format",
+                     "adl": "ADFS L format",
+                     "adD": "ADFS D format",
+                     "adE": "ADFS E format",
+                     "adEbig": "ADFS F format"}
     
     def __init__(self, adf, verify = 0):
     
@@ -137,7 +165,7 @@ class ADFSdisc:
             self.nsectors = 16
             self.sector_size = 256
             interleave = 0
-            self.disc_type = 'adf'
+            self.disc_type = 'ads'
             self.dir_markers = ('Hugo',)
         
         #if string.lower(adf_file[-4:])==(suffix+"adf"):
@@ -146,7 +174,7 @@ class ADFSdisc:
             self.nsectors = 16
             self.sector_size = 256
             interleave = 0
-            self.disc_type = 'adf'
+            self.disc_type = 'adm'
             self.dir_markers = ('Hugo',)
         
         #elif string.lower(adf_file[-4:])==(suffix+"adl"):
@@ -1393,9 +1421,7 @@ class ADFSdisc:
     
     def print_catalogue(self, files = None, path = "$", filetypes = 0):
     
-        """print_catalogue(self, files = None, path = "$", filetypes = 0)
-        
-        Prints the contents of the disc catalogue to standard output.
+        """Prints the contents of the disc catalogue to standard output.
         Usually, this method is called without specifying any of the keyword
         arguments, but these can be used to customise the output.
         
@@ -1631,12 +1657,8 @@ class ADFSdisc:
                       separator = ",", convert_dict = {},
                       with_time_stamps = False):
     
-        """extract_files(self, out_path, files = None, filetypes = 0,
-                         separator = ",", convert_dict = {},
-                         with_time_stamps = False)
-        
-        Extracts the files stored in the disc image into a directory structure
-        stored on the path specified by out_path.
+        """Extracts the files stored in the disc image into a directory
+        structure stored on the path specified by out_path.
         
         The files parameter specified a list of ADFSfile or ADFSdirectory
         instances to extract to the target file system. This keyword argument
@@ -1743,9 +1765,7 @@ class ADFSdisc:
     
     def _plural(self, msg, values, words):
     
-        """message = _plural(self, msg, values, words)
-        
-        Return a message which takes into account the plural form of
+        """Returns a message which takes into account the plural form of
         words in the original message, assuming that the appropriate
         form for negative numbers of items is the same as that for
         more than one item.
@@ -1778,9 +1798,7 @@ class ADFSdisc:
     
     def print_log(self, verbose = 0):
     
-        """print_log(self, verbose = 0)
-        
-        Print the disc verification log. Any purely informational messages
+        """Prints the disc verification log. Any purely informational messages
         are only printed if verbose is set to 1.
         """
         
@@ -1810,4 +1828,7 @@ class ADFSdisc:
         for msgtype, line in self.verify_log:
         
             print line
-
+    
+    def disc_format(self):
+    
+        return self._format_names[self.disc_type]
