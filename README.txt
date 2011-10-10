@@ -19,7 +19,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 Acknowledgements
 
 Thanks to John Kortink and David Ruck for their assistance and advice.
-Any errors or faults in this tool are not theirs.
+Any errors or faults in these libraries and tools are not theirs.
+
+Various documents from J.G. Harston (http://mdfs.net/Docs/Comp/Disk/Format/)
+and Robin Watts (http://wss.co.uk/pinknoise/Docs/index.html) have proved to be
+invaluable references when developing these libraries and tools.
 
 
 Description
