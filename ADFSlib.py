@@ -3,7 +3,7 @@
 """
 ADFSlib.py, a library for reading ADFS disc images.
 
-Copyright (c) 2003-2010, David Boddie
+Copyright (c) 2003-2011, David Boddie <david@boddie.org.uk>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -547,7 +547,7 @@ class ADFSdisc:
             
             return self.record['disc name'] #, map
         
-        if self.disc_type == 'adEbig':
+        elif self.disc_type == 'adEbig':
         
             self.record = self._read_disc_record(0xc6804)
             
