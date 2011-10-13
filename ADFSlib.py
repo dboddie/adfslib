@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#!/usr/bin/env python
 
 """
 ADFSlib.py, a library for reading ADFS disc images.
@@ -180,8 +180,8 @@ class ADFSdisc:
             self.ntracks = 160
             self.nsectors = 16        # per track
             self.sector_size = 256    # in bytes
-            # Interleave was originally 1 then 0 (from
-            # ~/Private/ADFS/LFormat.htm).
+            # Most L format discs are interleaved, but at least one is
+            # sequenced.
             interleave = 1
             self.disc_type = 'adl'
             self.dir_markers = ('Hugo',)
@@ -234,7 +234,7 @@ class ADFSdisc:
         if self.disc_type == 'adD':
         
             # Find the root directory name and all the files and directories
-            # contained within it
+            # contained within it.
             self.root_name, self.files = self._read_old_catalogue(0x400)
         
         elif self.disc_type == 'adE':
@@ -243,8 +243,8 @@ class ADFSdisc:
             self.disc_name = self._safe(self._read_disc_info(), with_space = 1)
             
             # Find the root directory name and all the files and directories
-            # contained within it
-            self.root_name, self.files = self._read_new_catalogue(0x800)
+            # contained within it.
+            self.root_name, self.files = self._read_new_catalogue(2*self.sector_size)
         
         elif self.disc_type == 'adEbig':
         
@@ -252,13 +252,13 @@ class ADFSdisc:
             self.disc_name = self._safe(self._read_disc_info(), with_space = 1)
             
             # Find the root directory name and all the files and directories
-            # contained within it
-            self.root_name, self.files = self._read_new_catalogue(0xc8800)
+            # contained within it. The 
+            self.root_name, self.files = self._read_new_catalogue((self.ntracks * self.nsectors/2 + 2) * self.sector_size)
         
         else:
         
             # Find the root directory name and all the files and directories
-            # contained within it
+            # contained within it.
             self.root_name, self.files = self._read_old_catalogue(2*self.sector_size)
     
     
