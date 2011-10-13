@@ -36,6 +36,85 @@ ERROR = 2
 between_epochs = ((365 * 70) + 17) * 24 * 360000L
 
 
+class Utilities:
+
+    # Little endian reading
+    
+    def _read_signed_word(self, s):
+    
+        return struct.unpack("<i", s)[0]
+    
+    def _read_unsigned_word(self, s):
+    
+        return struct.unpack("<I", s)[0]
+    
+    def _read_signed_byte(self, s):
+    
+        return struct.unpack("<b", s)[0]
+    
+    def _read_unsigned_byte(self, s):
+    
+        return struct.unpack("<B", s)[0]
+    
+    def _read_unsigned_half_word(self, s):
+    
+        return struct.unpack("<H", s)[0]
+    
+    def _read_signed_half_word(self, s):
+    
+        return struct.unpack("<h", s)[0]
+    
+    def _str2num(self, size, s):
+    
+        i = 0
+        n = 0
+        while i < size:
+        
+            n = n | (ord(s[i]) << (i*8))
+            i = i + 1
+        
+        return n
+    
+    def _binary(self, size, n):
+    
+        new = ""
+        while (n != 0) & (size > 0):
+        
+            if (n & 1)==1:
+                new = "1" + new
+            else:
+                new = "0" + new
+            
+            n = n >> 1
+            size = size - 1
+        
+        if size > 0:
+            new = ("0"*size) + new
+        
+        return new
+    
+    def _safe(self, s, with_space = 0):
+    
+        new = ""
+        if with_space == 1:
+            lower = 31
+        else:
+            lower = 32
+        
+        for i in s:
+        
+            if ord(i) <= lower:
+                break
+            
+            if ord(i) >= 128:
+                c = ord(i)^128
+                if c > 32:
+                    new = new + chr(c)
+            else:
+                new = new + i
+        
+        return new
+
 class ADFS_exception(Exception):
 
     pass
@@ -113,7 +192,531 @@ class ADFSfile:
             return ()
 
 
-class ADFSdisc:
+class ADFSmap(Utilities):
+
+    def __getitem__(self, index):
+    
+        return self.disc_map[index]
+    
+    def _read_freespace(self):
+    
+        # Currently unused
+            
+        base = 0
+    
+        free = []
+        p = 0
+        while self.sectors[base+p] != 0:
+    
+            free.append(self._str2num(3, self.sectors[base+p:base+p+3]))
+    
+        name = self.sectors[self.sector_size-9:self.sector_size-4]
+    
+        disc_size = self._str2num(
+            3, self.sectors[self.sector_size-4:self.sector_size-1]
+            )
+    
+        checksum0 = self._read_unsigned_byte(self.sectors[self.sector_size-1])
+    
+        base = self.sector_size
+    
+        p = 0
+        while self.sectors[base+p] != 0:
+    
+            free.append(self._str2num(3, self.sectors[base+p:base+p+3]))
+    
+        name = name + \
+            self.sectors[base+self.sector_size-10:base+self.sector_size-5]
+    
+        disc_id = self._str2num(
+            2, self.sectors[base+self.sector_size-5:base+self.sector_size-3]
+            )
+    
+        boot = self._read_unsigned_byte(self.sectors[base+self.sector_size-3])
+    
+        checksum1 = self._read_unsigned_byte(self.sectors[base+self.sector_size-1])
+
+class ADFSnewMap(ADFSmap):
+
+    dir_markers = ('Hugo', 'Nick')
+    root_dir_address = 0x800
+    
+    def __init__(self, header, begin, end, sectors, sector_size):
+    
+        self.header = header
+        self.begin = begin
+        self.end = end
+        self.sectors = sectors
+        self.sector_size = sector_size
+        
+        self.free_space = self._read_free_space()
+        self.disc_map = self._read_disc_map()
+    
+    def _read_disc_map(self):
+    
+        disc_map = {}
+        
+        a = self.begin
+        
+        current_piece = None
+        current_start = 0
+        
+        next_zone = self.header + self.sector_size
+        
+        # Copy the free space map.
+        free_space = self.free_space[:]
+        
+        while a < self.end:
+        
+            # The next entry to be read will occur one byte after this one
+            # unless one of the following checks override this behaviour.
+            next = a + 1
+            
+            if (a % self.sector_size) < 4:
+            
+                # In a zone header. Not the first zone header as this
+                # was already skipped when we started reading.
+                next = a + 4 - (a % self.sector_size)
+                
+                # Set the next zone offset.
+                next_zone = next_zone + self.sector_size
+                
+                # Reset the current piece and starting offset.
+                current_piece = None
+                current_start = 0
+            
+            elif free_space != [] and a >= free_space[0][0]:
+            
+                # In the next free space entry. Go to the entry following
+                # it and discard this free space entry.
+                next = free_space[0][1]
+                
+                free_space.pop(0)
+                
+                # Reset the current piece and starting offset.
+                current_piece = None
+                current_start = 0
+            
+            elif current_piece is None and (next_zone - a) >= 2:
+            
+                # If there is enough space left in this zone to allow
+                # further fragments then read the next two bytes.
+                value = self._read_unsigned_half_word(self.sectors[a:a+2])
+                
+                entry = value & 0x7fff
+                
+                # See ADFS/EAddrs.htm document for restriction on
+                # the disc address and hence the file number.
+                # i.e.the top bit of the file number cannot be set.
+                
+                if entry >= 1:
+                
+                    # Defects (1), files or directories (greater than 1)
+                    next = a + 2
+                    
+                    # Define a new entry.
+                    #print "Begin:", hex(entry), hex(a)
+                    
+                    if not disc_map.has_key(entry):
+                    
+                        # Create a new map entry if none exists.
+                        disc_map[entry] = []
+                    
+                    if (value & 0x8000) == 0:
+                    
+                        # Record the file number and start of this fragment.
+                        current_piece = entry
+                        current_start = a
+                    
+                    else:
+                    
+                        # For an immediately terminated fragment, add the
+                        # extents of the block to the list of pieces found
+                        # and implicitly finish reading this fragment
+                        # (current_piece remains None).
+                        
+                        start_addr = self.find_address_from_map(
+                            a, self.begin, entry
+                            )
+                        end_addr = self.find_address_from_map(
+                            next, self.begin, entry
+                            )
+                        
+                        if [start_addr, end_addr] not in disc_map[entry]:
+                        
+                            disc_map[entry].append( [start_addr, end_addr] )
+                
+                else:
+                
+                    # Search for a valid file number.
+                    # Should probably stop looking in this zone.
+                    next = a + 1
+            
+            elif current_piece is not None:
+            
+                # In a piece being read.
+                
+                value = ord(self.sectors[a])
+                
+                if value == 0:
+                
+                    # Still in the block.
+                    next = a + 1
+                
+                elif value == 0x80:
+                
+                    # At the end of the block.
+                    next = a + 1
+                    
+                    # For relevant entries add the block to the list of
+                    # pieces found.
+                    start_addr = self.find_address_from_map(
+                        current_start, self.begin, current_piece
+                        )
+                    end_addr = self.find_address_from_map(
+                        next, self.begin, current_piece
+                        )
+                    
+                    if [start_addr, end_addr] not in disc_map[current_piece]:
+                    
+                        disc_map[current_piece].append(
+                            [ start_addr, end_addr]
+                            )
+                    
+                    # Look for a new fragment.
+                    current_piece = None
+                
+                else:
+                
+                    # The byte found was unexpected - backtrack to the
+                    # byte after the start of this block and try again.
+                    #print "Backtrack from %s to %s" % (hex(a), hex(current_start+1))
+                    
+                    next = current_start + 1
+                    current_piece = None
+            
+            # Move to the next relevant byte.
+            a = next
+        
+        return disc_map
+    
+    def _read_free_space(self):
+    
+        free_space = []
+        
+        a = self.header
+        
+        while a < self.end:
+        
+            # The next zone starts a sector after this one.
+            next_zone = a + self.sector_size
+            
+            a = a + 1
+            
+            # Start by reading the offset in bits from the start of the header
+            # of the first item of free space in the map.
+            offset = self._read_unsigned_half_word(self.sectors[a:a+2])
+            
+            # The top bit is apparently always set, so mask it off and convert
+            # the result into bytes. * Not sure if this is the case for
+            # entries in the map. *
+            next = ((offset & 0x7fff) >> 3)
+            
+            if next == 0:
+            
+                # No more free space in this zone. Look at the free
+                # space field in the next zone.
+                a = next_zone
+                continue
+            
+            # Update the offset to point to the free space in this zone.
+            a = a + next
+            
+            while a < next_zone:
+            
+                # Read the offset to the next free fragment in this zone.
+                offset = self._read_unsigned_half_word(self.sectors[a:a+2])
+                
+                # Convert this to a byte offset.
+                next = ((offset & 0x7fff) >> 3)
+                
+                # Find the end of the free space.
+                b = a + 1
+                
+                while b < next_zone:
+                
+                    c = b + 1
+                    
+                    value = self._read_unsigned_byte(self.sectors[b])
+                    
+                    if (value & 0x80) != 0:
+                    
+                        break
+                    
+                    b = c
+                
+                # Record the offset into the map of this item of free space
+                # and the offset of the byte after it ends.
+                free_space.append( (a, c) )
+                
+                if next == 0:
+                
+                    break
+                
+                # Move to the next free space entry.
+                a = a + next
+            
+            # Whether we are at the end of the zone or not, move to the
+            # beginning of the next zone.
+            a = next_zone
+        
+        # Return the free space list.
+        return free_space
+    
+    def read_catalogue(self, base):
+    
+        head = base
+        p = 0
+        
+        dir_seq = self.sectors[head + p]
+        dir_start = self.sectors[head+p+1:head+p+5]
+        if dir_start not in self.dir_markers:
+        
+            if self.verify:
+            
+                self.verify_log.append(
+                    (WARNING, 'Not a directory: %s' % hex(head))
+                    )
+            
+            return '', []
+        
+        p = p + 5
+        
+        files = []
+        
+        while ord(self.sectors[head+p]) != 0:
+        
+            old_name = self.sectors[head+p:head+p+10]
+            top_set = 0
+            counter = 1
+            for i in old_name:
+                if (ord(i) & 128) != 0:
+                    top_set = counter
+                counter = counter + 1
+            
+            name = self._safe(self.sectors[head+p:head+p+10])
+            
+            load = self._read_unsigned_word(self.sectors[head+p+10:head+p+14])
+            exe = self._read_unsigned_word(self.sectors[head+p+14:head+p+18])
+            length = self._read_unsigned_word(self.sectors[head+p+18:head+p+22])
+            
+            inddiscadd = self._read_new_address(
+                self.sectors[head+p+22:head+p+25]
+                )
+            newdiratts = self._read_unsigned_byte(self.sectors[head+p+25])
+            
+            if inddiscadd == -1:
+            
+                if (newdiratts & 0x8) != 0:
+                
+                    if self.verify:
+                    
+                        self.verify_log.append(
+                            (WARNING, "Couldn't find directory: %s" % name)
+                            )
+                        self.verify_log.append(
+                            (WARNING, "    at: %x" % (head+p+22))
+                            )
+                        self.verify_log.append( (
+                            WARNING, "    file details: %x" % \
+                            self._str2num(3, self.sectors[head+p+22:head+p+25])
+                            ) )
+                        self.verify_log.append(
+                            (WARNING, "    atts: %x" % newdiratts)
+                            )
+                
+                elif length != 0:
+                
+                    if self.verify:
+                    
+                        self.verify_log.append(
+                            (WARNING, "Couldn't find file: %s" % name)
+                            )
+                        self.verify_log.append(
+                            (WARNING, "    at: %x" % (head+p+22))
+                            )
+                        self.verify_log.append( (
+                            WARNING,
+                            "    file details: %x" % \
+                            self._str2num(3, self.sectors[head+p+22:head+p+25])
+                            ) )
+                        self.verify_log.append(
+                            (WARNING, "    atts: %x" % newdiratts)
+                            )
+                
+                else:
+                
+                    # Store a zero length file. This appears to be the
+                    # standard behaviour for storing empty files.
+                    files.append(ADFSfile(name, "", load, exe, length))
+            
+            else:
+            
+                if (newdiratts & 0x8) != 0:
+                
+                    # Remember that inddiscadd will be a sequence of
+                    # pairs of addresses.
+                    
+                    for start, end in inddiscadd:
+                    
+                        # Try to interpret the data at the referenced address
+                        # as a directory.
+                        
+                        lower_dir_name, lower_files = \
+                            self.read_catalogue(start)
+                        
+                        # Store the directory name and file found therein.
+                        files.append(ADFSdirectory(name, lower_files))
+                
+                else:
+                
+                    # Remember that inddiscadd will be a sequence of
+                    # pairs of addresses.
+                    
+                    file = ""
+                    remaining = length
+                    
+                    for start, end in inddiscadd:
+                    
+                        amount = min(remaining, end - start)
+                        file = file + self.sectors[start : (start + amount)]
+                        remaining = remaining - amount
+                    
+                    files.append(ADFSfile(name, file, load, exe, length))
+            
+            p = p + 26
+        
+        
+        # Go to tail of directory structure (0x800 -- 0xc00)
+        
+        tail = head + self.sector_size
+        
+        dir_end = self.sectors[tail+self.sector_size-5:tail+self.sector_size-1]
+        
+        if dir_end not in self.dir_markers:
+        
+            if self.verify:
+            
+                self.verify_log.append(
+                    ( WARNING,
+                      'Discrepancy in directory structure: [%x, %x]' % \
+                      ( head, tail ) )
+                    )
+            
+            return '', files
+        
+        dir_name = self._safe(
+            self.sectors[tail+self.sector_size-16:tail+self.sector_size-6]
+            )
+        
+        parent = \
+            self.sectors[tail+self.sector_size-38:tail+self.sector_size-35]
+        
+        dir_title = \
+            self.sectors[tail+self.sector_size-35:tail+self.sector_size-16]
+        
+        if head == self.root_dir_address:
+            dir_name = '$'
+        
+        endseq = self.sectors[tail+self.sector_size-6]
+        if endseq != dir_seq:
+        
+            if self.verify:
+            
+                self.verify_log.append(
+                    ( WARNING,
+                      'Broken directory: %s at [%x, %x]' % \
+                      (dir_title, head, tail) )
+                    )
+            
+            return dir_name, files
+        
+        return dir_name, files
+    
+    def _read_new_address(self, s):
+    
+        # From the three character string passed, determine the address on the
+        # disc.
+        value = self._str2num(3, s)
+        
+        # This is a SIN (System Internal Number)
+        # The bottom 8 bits are the sector offset + 1
+        offset = value & 0xff
+        if offset != 0:
+            address = (offset - 1) * self.sector_size
+        else:
+            address = 0
+        
+        # The top 16 bits are the file number
+        file_no = value >> 8
+        
+        # The pieces of the object are returned as a list of pairs of
+        # addresses.
+        pieces = self._find_in_new_map(file_no)
+        
+        if pieces == []:
+        
+            return -1
+        
+        # Ensure that the first piece of data is read from the appropriate
+        # point in the relevant sector.
+        
+        pieces[0][0] = pieces[0][0] + address
+        
+        return pieces
+    
+    def _find_in_new_map(self, file_no):
+    
+        try:
+        
+            return self.disc_map[file_no]
+        
+        except KeyError:
+        
+            return []
+    
+    def find_address_from_map(self, addr, begin, entry):
+    
+        return ((addr - begin) * self.sector_size)
+
+class ADFSbigNewMap(ADFSnewMap):
+
+    dir_markers = ('Nick',)
+    root_dir_address = 0xc8800
+    
+    def find_address_from_map(self, addr, begin, entry):
+    
+        # I can't remember where the rationale for this calculation
+        # came from or where the necessary information was obtained.
+        # It probably came from one of the WSS files, such as
+        # Formats.htm or Formats2.htm which imply that the F format
+        # uses 512 byte sectors (see the 0x200 value below) and
+        # indicate that F format uses 4 zones rather than 1.
+        
+        upper = (entry & 0x7f00) >> 8
+        
+        if upper > 1:
+            upper = upper - 1
+        if upper > 3:
+            upper = 3
+        
+        return ((addr - begin) - (upper * 0xc8)) * 0x200
+
+class ADFSoldMap(ADFSmap):
+
+    pass
+
+class ADFSdisc(Utilities):
 
     """disc = ADFSdisc(file_handle, verify = 0)
     
@@ -244,7 +847,7 @@ class ADFSdisc:
             
             # Find the root directory name and all the files and directories
             # contained within it.
-            self.root_name, self.files = self._read_new_catalogue(2*self.sector_size)
+            self.root_name, self.files = self.disc_map.read_catalogue(2*self.sector_size)
         
         elif self.disc_type == 'adEbig':
         
@@ -253,71 +856,13 @@ class ADFSdisc:
             
             # Find the root directory name and all the files and directories
             # contained within it. The 
-            self.root_name, self.files = self._read_new_catalogue((self.ntracks * self.nsectors/2 + 2) * self.sector_size)
+            self.root_name, self.files = self.disc_map.read_catalogue((self.ntracks * self.nsectors/2 + 2) * self.sector_size)
         
         else:
         
             # Find the root directory name and all the files and directories
             # contained within it.
             self.root_name, self.files = self._read_old_catalogue(2*self.sector_size)
-    
-    
-    # Little endian reading
-    
-    def _read_signed_word(self, s):
-    
-        return struct.unpack("<i", s)[0]
-    
-    def _read_unsigned_word(self, s):
-    
-        return struct.unpack("<I", s)[0]
-    
-    def _read_signed_byte(self, s):
-    
-        return struct.unpack("<b", s)[0]
-    
-    def _read_unsigned_byte(self, s):
-    
-        return struct.unpack("<B", s)[0]
-    
-    def _read_unsigned_half_word(self, s):
-    
-        return struct.unpack("<H", s)[0]
-    
-    def _read_signed_half_word(self, s):
-    
-        return struct.unpack("<h", s)[0]
-    
-    def _str2num(self, size, s):
-    
-        i = 0
-        n = 0
-        while i < size:
-        
-            n = n | (ord(s[i]) << (i*8))
-            i = i + 1
-        
-        return n
-    
-    
-    def _binary(self, size, n):
-    
-        new = ""
-        while (n != 0) & (size > 0):
-        
-            if (n & 1)==1:
-                new = "1" + new
-            else:
-                new = "0" + new
-            
-            n = n >> 1
-            size = size - 1
-        
-        if size > 0:
-            new = ("0"*size) + new
-        
-        return new
-    
     
     def _identify_format(self, adf):
     
@@ -353,7 +898,6 @@ class ADFSdisc:
             # for the length of the image file.
             checklist["Length field matches image length"] = 1
         
-        
         # Check the sector size of the disc.
         
         if record["sector size"] == 1024:
@@ -361,14 +905,12 @@ class ADFSdisc:
             # These should be equal if the disc record is valid.
             checklist["Expected sector size (1024 bytes)"] = 1
         
-        
         # Check the density of the disc.
         
         if record["density"] == "double":
         
             # This should be a double density disc if the disc record is valid.
             checklist["Expected density (double)"] = 1
-        
         
         # Check the data at the root directory location.
         
@@ -460,7 +1002,6 @@ class ADFSdisc:
             
             return '?'
     
-    
     def _read_disc_record(self, offset):
     
         # Total sectors per track (sectors * heads)
@@ -524,7 +1065,6 @@ class ADFSdisc:
             'disc size': disc_size, 'disc ID': disc_id,
             'disc name': disc_name, 'zones': zones, 'root dir': root }
     
-    
     def _read_disc_info(self):
     
         checksum = ord(self.sectors[0])
@@ -538,14 +1078,11 @@ class ADFSdisc:
             
             self.map_header = 0
             self.map_start, self.map_end = 0x40, 0x400
-            self.free_space = self._read_free_space(
-                self.map_header, self.map_start, self.map_end
-                )
-            self.disc_map = self._read_new_map(
-                self.map_header, self.map_start, self.map_end
-                )
+            self.disc_map = ADFSnewMap(self.map_header, self.map_start,
+                                       self.map_end, self.sectors,
+                                       self.sector_size)
             
-            return self.record['disc name'] #, map
+            return self.record['disc name']
         
         elif self.disc_type == 'adEbig':
         
@@ -555,277 +1092,14 @@ class ADFSdisc:
             
             self.map_header = 0xc6800
             self.map_start, self.map_end = 0xc6840, 0xc7800
-            self.free_space = self._read_free_space(
-                self.map_header, self.map_start, self.map_end
-                )
-            self.disc_map = self._read_new_map(
-                self.map_header, self.map_start, self.map_end
-                )
+            self.disc_map = ADFSbigNewMap(self.map_header, self.map_start,
+                                          self.map_end, self.sectors,
+                                          self.sector_size)
             
-            return self.record['disc name'] #, map
+            return self.record['disc name']
         
         else:
             return 'Unknown'
-    
-    #    zone_size = 819200 / record['zones']
-    #    ids_per_zone = zone_size /
-    
-    def _read_new_map(self, header, begin, end):
-    
-        disc_map = {}
-        
-        a = begin
-        
-        current_piece = None
-        current_start = 0
-        
-        next_zone = header + self.sector_size
-        
-        # Copy the free space map.
-        free_space = self.free_space[:]
-        
-        while a < end:
-        
-            # The next entry to be read will occur one byte after this one
-            # unless one of the following checks override this behaviour.
-            next = a + 1
-            
-            if (a % self.sector_size) < 4:
-            
-                # In a zone header. Not the first zone header as this
-                # was already skipped when we started reading.
-                next = a + 4 - (a % self.sector_size)
-                
-                # Set the next zone offset.
-                next_zone = next_zone + self.sector_size
-                
-                # Reset the current piece and starting offset.
-                current_piece = None
-                current_start = 0
-            
-            elif free_space != [] and a >= free_space[0][0]:
-            
-                # In the next free space entry. Go to the entry following
-                # it and discard this free space entry.
-                next = free_space[0][1]
-                
-                free_space.pop(0)
-                
-                # Reset the current piece and starting offset.
-                current_piece = None
-                current_start = 0
-            
-            elif current_piece is None and (next_zone - a) >= 2:
-            
-                # If there is enough space left in this zone to allow
-                # further fragments then read the next two bytes.
-                value = self._read_unsigned_half_word(self.sectors[a:a+2])
-                
-                entry = value & 0x7fff
-                
-                # See ADFS/EAddrs.htm document for restriction on
-                # the disc address and hence the file number.
-                # i.e.the top bit of the file number cannot be set.
-                
-                if entry >= 1:
-                
-                    # Defects (1), files or directories (greater than 1)
-                    next = a + 2
-                    
-                    # Define a new entry.
-                    #print "Begin:", hex(entry), hex(a)
-                    
-                    if not disc_map.has_key(entry):
-                    
-                        # Create a new map entry if none exists.
-                        disc_map[entry] = []
-                    
-                    if (value & 0x8000) == 0:
-                    
-                        # Record the file number and start of this fragment.
-                        current_piece = entry
-                        current_start = a
-                    
-                    else:
-                    
-                        # For an immediately terminated fragment, add the
-                        # extents of the block to the list of pieces found
-                        # and implicitly finish reading this fragment
-                        # (current_piece remains None).
-                        
-                        start_addr = self._find_address_from_map(
-                            a, begin, entry
-                            )
-                        end_addr = self._find_address_from_map(
-                            next, begin, entry
-                            )
-                        
-                        if [start_addr, end_addr] not in disc_map[entry]:
-                        
-                            disc_map[entry].append( [start_addr, end_addr] )
-                
-                else:
-                
-                    # Search for a valid file number.
-                    # Should probably stop looking in this zone.
-                    next = a + 1
-            
-            elif current_piece is not None:
-            
-                # In a piece being read.
-                
-                value = ord(self.sectors[a])
-                
-                if value == 0:
-                
-                    # Still in the block.
-                    next = a + 1
-                
-                elif value == 0x80:
-                
-                    # At the end of the block.
-                    next = a + 1
-                    
-                    # For relevant entries add the block to the list of
-                    # pieces found.
-                    start_addr = self._find_address_from_map(
-                        current_start, begin, current_piece
-                        )
-                    end_addr = self._find_address_from_map(
-                        next, begin, current_piece
-                        )
-                    
-                    if [start_addr, end_addr] not in disc_map[current_piece]:
-                    
-                        disc_map[current_piece].append(
-                            [ start_addr, end_addr]
-                            )
-                    
-                    # Look for a new fragment.
-                    current_piece = None
-                
-                else:
-                
-                    # The byte found was unexpected - backtrack to the
-                    # byte after the start of this block and try again.
-                    #print "Backtrack from %s to %s" % (hex(a), hex(current_start+1))
-                    
-                    next = current_start + 1
-                    current_piece = None
-            
-            # Move to the next relevant byte.
-            a = next
-        
-        return disc_map
-    
-    def _read_free_space(self, header, begin, end):
-    
-        free_space = []
-        
-        a = header
-        
-        while a < end:
-        
-            # The next zone starts a sector after this one.
-            next_zone = a + self.sector_size
-            
-            a = a + 1
-            
-            # Start by reading the offset in bits from the start of the header
-            # of the first item of free space in the map.
-            offset = self._read_unsigned_half_word(self.sectors[a:a+2])
-            
-            # The top bit is apparently always set, so mask it off and convert
-            # the result into bytes. * Not sure if this is the case for
-            # entries in the map. *
-            next = ((offset & 0x7fff) >> 3)
-            
-            if next == 0:
-            
-                # No more free space in this zone. Look at the free
-                # space field in the next zone.
-                a = next_zone
-                continue
-            
-            # Update the offset to point to the free space in this zone.
-            a = a + next
-            
-            while a < next_zone:
-            
-                # Read the offset to the next free fragment in this zone.
-                offset = self._read_unsigned_half_word(self.sectors[a:a+2])
-                
-                # Convert this to a byte offset.
-                next = ((offset & 0x7fff) >> 3)
-                
-                # Find the end of the free space.
-                b = a + 1
-                
-                while b < next_zone:
-                
-                    c = b + 1
-                    
-                    value = self._read_unsigned_byte(self.sectors[b])
-                    
-                    if (value & 0x80) != 0:
-                    
-                        break
-                    
-                    b = c
-                
-                # Record the offset into the map of this item of free space
-                # and the offset of the byte after it ends.
-                free_space.append( (a, c) )
-                
-                if next == 0:
-                
-                    break
-                
-                # Move to the next free space entry.
-                a = a + next
-            
-            # Whether we are at the end of the zone or not, move to the
-            # beginning of the next zone.
-            a = next_zone
-        
-        # Return the free space list.
-        return free_space
-    
-    def _find_address_from_map(self, addr, begin, entry):
-    
-        if self.disc_type == 'adE':
-        
-            address = ((addr - begin) * self.sector_size)
-        
-        elif self.disc_type == 'adEbig':
-        
-            # I can't remember where the rationale for this calculation
-            # came from or where the necessary information was obtained.
-            # It probably came from one of the WSS files, such as
-            # Formats.htm or Formats2.htm which imply that the F format
-            # uses 512 byte sectors (see the 0x200 value below) and
-            # indicate that F format uses 4 zones rather than 1.
-            
-            upper = (entry & 0x7f00) >> 8
-            
-            if upper > 1:
-                upper = upper - 1
-            if upper > 3:
-                upper = 3
-            
-            address = ((addr - begin) - (upper * 0xc8)) * 0x200
-        
-        return address
-    
-    def _find_in_new_map(self, file_no):
-    
-        try:
-        
-            return self.disc_map[file_no]
-        
-        except KeyError:
-        
-            return []
     
     def _read_tracks(self, f, inter):
     
@@ -871,7 +1145,6 @@ class ADFSdisc:
         
         return t
     
-    
     def _read_sectors(self, adf):
     
         s = []
@@ -893,69 +1166,6 @@ class ADFSdisc:
                 (self.ntracks, self.nsectors)
         
         return s
-    
-    
-    def _safe(self, s, with_space = 0):
-    
-        new = ""
-        if with_space == 1:
-            lower = 31
-        else:
-            lower = 32
-        
-        for i in s:
-        
-            if ord(i) <= lower:
-                break
-            
-            if ord(i) >= 128:
-                c = ord(i)^128
-                if c > 32:
-                    new = new + chr(c)
-            else:
-                new = new + i
-        
-        return new
-    
-    
-    def _read_freespace(self):
-    
-        # Currently unused
-            
-        base = 0
-    
-        free = []
-        p = 0
-        while self.sectors[base+p] != 0:
-    
-            free.append(self._str2num(3, self.sectors[base+p:base+p+3]))
-    
-        name = self.sectors[self.sector_size-9:self.sector_size-4]
-    
-        disc_size = self._str2num(
-            3, self.sectors[self.sector_size-4:self.sector_size-1]
-            )
-    
-        checksum0 = self._read_unsigned_byte(self.sectors[self.sector_size-1])
-    
-        base = self.sector_size
-    
-        p = 0
-        while self.sectors[base+p] != 0:
-    
-            free.append(self._str2num(3, self.sectors[base+p:base+p+3]))
-    
-        name = name + \
-            self.sectors[base+self.sector_size-10:base+self.sector_size-5]
-    
-        disc_id = self._str2num(
-            2, self.sectors[base+self.sector_size-5:base+self.sector_size-3]
-            )
-    
-        boot = self._read_unsigned_byte(self.sectors[base+self.sector_size-3])
-    
-        checksum1 = self._read_unsigned_byte(self.sectors[base+self.sector_size-1])
-    
     
     def _read_old_catalogue(self, base):
     
@@ -1115,213 +1325,6 @@ class ADFSdisc:
         
         return dir_name, files
     
-    
-    def _read_new_address(self, s):
-    
-        # From the three character string passed, determine the address on the
-        # disc.
-        value = self._str2num(3, s)
-        
-        # This is a SIN (System Internal Number)
-        # The bottom 8 bits are the sector offset + 1
-        offset = value & 0xff
-        if offset != 0:
-            address = (offset - 1) * self.sector_size
-        else:
-            address = 0
-        
-        # The top 16 bits are the file number
-        file_no = value >> 8
-        
-        # The pieces of the object are returned as a list of pairs of
-        # addresses.
-        pieces = self._find_in_new_map(file_no)
-        
-        if pieces == []:
-        
-            return -1
-        
-        # Ensure that the first piece of data is read from the appropriate
-        # point in the relevant sector.
-        
-        pieces[0][0] = pieces[0][0] + address
-        
-        return pieces
-    
-    
-    def _read_new_catalogue(self, base):
-    
-        head = base
-        p = 0
-        
-        dir_seq = self.sectors[head + p]
-        dir_start = self.sectors[head+p+1:head+p+5]
-        if dir_start not in self.dir_markers:
-        
-            if self.verify:
-            
-                self.verify_log.append(
-                    (WARNING, 'Not a directory: %s' % hex(head))
-                    )
-            
-            return '', []
-        
-        p = p + 5
-        
-        files = []
-        
-        while ord(self.sectors[head+p]) != 0:
-        
-            old_name = self.sectors[head+p:head+p+10]
-            top_set = 0
-            counter = 1
-            for i in old_name:
-                if (ord(i) & 128) != 0:
-                    top_set = counter
-                counter = counter + 1
-            
-            name = self._safe(self.sectors[head+p:head+p+10])
-            
-            load = self._read_unsigned_word(self.sectors[head+p+10:head+p+14])
-            exe = self._read_unsigned_word(self.sectors[head+p+14:head+p+18])
-            length = self._read_unsigned_word(self.sectors[head+p+18:head+p+22])
-            
-            inddiscadd = self._read_new_address(
-                self.sectors[head+p+22:head+p+25]
-                )
-            newdiratts = self._read_unsigned_byte(self.sectors[head+p+25])
-            
-            if inddiscadd == -1:
-            
-                if (newdiratts & 0x8) != 0:
-                
-                    if self.verify:
-                    
-                        self.verify_log.append(
-                            (WARNING, "Couldn't find directory: %s" % name)
-                            )
-                        self.verify_log.append(
-                            (WARNING, "    at: %x" % (head+p+22))
-                            )
-                        self.verify_log.append( (
-                            WARNING, "    file details: %x" % \
-                            self._str2num(3, self.sectors[head+p+22:head+p+25])
-                            ) )
-                        self.verify_log.append(
-                            (WARNING, "    atts: %x" % newdiratts)
-                            )
-                
-                elif length != 0:
-                
-                    if self.verify:
-                    
-                        self.verify_log.append(
-                            (WARNING, "Couldn't find file: %s" % name)
-                            )
-                        self.verify_log.append(
-                            (WARNING, "    at: %x" % (head+p+22))
-                            )
-                        self.verify_log.append( (
-                            WARNING,
-                            "    file details: %x" % \
-                            self._str2num(3, self.sectors[head+p+22:head+p+25])
-                            ) )
-                        self.verify_log.append(
-                            (WARNING, "    atts: %x" % newdiratts)
-                            )
-                
-                else:
-                
-                    # Store a zero length file. This appears to be the
-                    # standard behaviour for storing empty files.
-                    files.append(ADFSfile(name, "", load, exe, length))
-            
-            else:
-            
-                if (newdiratts & 0x8) != 0:
-                
-                    # Remember that inddiscadd will be a sequence of
-                    # pairs of addresses.
-                    
-                    for start, end in inddiscadd:
-                    
-                        # Try to interpret the data at the referenced address
-                        # as a directory.
-                        
-                        lower_dir_name, lower_files = \
-                            self._read_new_catalogue(start)
-                        
-                        # Store the directory name and file found therein.
-                        files.append(ADFSdirectory(name, lower_files))
-                
-                else:
-                
-                    # Remember that inddiscadd will be a sequence of
-                    # pairs of addresses.
-                    
-                    file = ""
-                    remaining = length
-                    
-                    for start, end in inddiscadd:
-                    
-                        amount = min(remaining, end - start)
-                        file = file + self.sectors[start : (start + amount)]
-                        remaining = remaining - amount
-                    
-                    files.append(ADFSfile(name, file, load, exe, length))
-            
-            p = p + 26
-        
-        
-        # Go to tail of directory structure (0x800 -- 0xc00)
-        
-        tail = head + self.sector_size
-        
-        dir_end = self.sectors[tail+self.sector_size-5:tail+self.sector_size-1]
-        
-        if dir_end not in self.dir_markers:
-        
-            if self.verify:
-            
-                self.verify_log.append(
-                    ( WARNING,
-                      'Discrepancy in directory structure: [%x, %x]' % \
-                      ( head, tail ) )
-                    )
-            
-            return '', files
-        
-        dir_name = self._safe(
-            self.sectors[tail+self.sector_size-16:tail+self.sector_size-6]
-            )
-        
-        parent = \
-            self.sectors[tail+self.sector_size-38:tail+self.sector_size-35]
-        
-        dir_title = \
-            self.sectors[tail+self.sector_size-35:tail+self.sector_size-16]
-        
-        if head == 0x800 and self.disc_type == 'adE':
-            dir_name = '$'
-        if head == 0xc8800 and self.disc_type == 'adEbig':
-            dir_name = '$'
-        
-        endseq = self.sectors[tail+self.sector_size-6]
-        if endseq != dir_seq:
-        
-            if self.verify:
-            
-                self.verify_log.append(
-                    ( WARNING,
-                      'Broken directory: %s at [%x, %x]' % \
-                      (dir_title, head, tail) )
-                    )
-            
-            return dir_name, files
-        
-        return dir_name, files
-    
-    
     def print_catalogue(self, files = None, path = "$", filetypes = 0):
     
         """Prints the contents of the disc catalogue to standard output.
@@ -1392,7 +1395,6 @@ class ADFSdisc:
             else:
             
                 self.print_catalogue(obj.files, path + "." + name, filetypes)
-    
     
     def _convert_name(self, old_name, convert_dict):
     
@@ -1486,7 +1488,6 @@ class ADFSdisc:
                     obj.files, new_path, filetypes, separator, convert_dict
                     )
     
-    
     def _extract_new_files(self, objects, path, filetypes = 0, separator = ",",
                            convert_dict = {}, with_time_stamps = False):
     
@@ -1554,7 +1555,6 @@ class ADFSdisc:
                 self._extract_new_files(
                     obj.files, new_path, filetypes, separator, convert_dict
                     )
-    
     
     def extract_files(self, out_path, files = None, filetypes = 0,
                       separator = ",", convert_dict = {},
