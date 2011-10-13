@@ -1,6 +1,6 @@
 ADFSlib and ADF2INF
 
-Copyright (c) 2000-2010, David Boddie
+Copyright (c) 2000-2011, David Boddie <david@boddie.org.uk>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
