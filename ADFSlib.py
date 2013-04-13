@@ -114,6 +114,120 @@ class Utilities:
                 new = new + i
         
         return new
+    
+    def _plural(self, msg, values, words):
+    
+        """Returns a message which takes into account the plural form of
+        words in the original message, assuming that the appropriate
+        form for negative numbers of items is the same as that for
+        more than one item.
+        
+        values is a list of numeric values referenced in the message.
+        words is a list of sequences of words to substitute into the
+        message. This takes the form
+        
+            [ word_to_use_for_zero_items,
+              word_to_use_for_one_item,
+              word_to_use_for_two_or_more_items ]
+        
+        The length of the values and words lists must be equal.
+        """
+        
+        substitutions = []
+        
+        for i in range(0, len(values)):
+        
+            n = values[i]
+            
+            # Each number must be mapped to a value in the range [0, 2].
+            if n > 1: n = 2
+            elif n < 0: n = 2
+            
+            substitutions.append(values[i])
+            substitutions.append(words[i][n])
+        
+        return msg % tuple(substitutions)
+    
+    def _create_directory(self, path, name = None):
+    
+        elements = []
+        
+        while not os.path.exists(path) and path != "":
+        
+            path, file = os.path.split(path)
+            
+            elements.insert(0, file)
+        
+        if path != "":
+        
+            elements.insert(0, path)
+        
+        if name is not None:
+        
+            elements.append(name)
+        
+        # Remove any empty list elements or those containing a $ character.
+        elements = filter(lambda x: x != '' and x != "$", elements)
+        
+        try:
+        
+            built = ""
+            
+            for element in elements:
+            
+                built = os.path.join(built, element)
+                
+                if not os.path.exists(built):
+                
+                    # This element of the directory does not exist.
+                    # Create a directory here.
+                    os.mkdir(built)
+                    print 'Created directory:', built
+                
+                elif not os.path.isdir(built):
+                
+                    # This element of the directory already exists
+                    # but is not a directory.
+                    print 'A file exists which prevents a ' + \
+                        'directory from being created: %s' % built
+                    
+                    return ""
+        
+        except OSError:
+        
+            print 'Directory could not be created: %s' % \
+                string.join(elements, os.sep)
+            
+            return ""
+        
+        # Success
+        return built
+    
+    def _convert_name(self, old_name, convert_dict):
+    
+        # Use the conversion dictionary to convert any forbidden
+        # characters to accepted local substitutes.
+        name = ""
+        
+        for c in old_name:
+        
+            if c in convert_dict.keys():
+            
+                name = name + convert_dict[c]
+            
+            else:
+            
+                name = name + c
+        
+        if self.verify and old_name != name:
+        
+            self.verify_log.append(
+                ( WARNING,
+                  "Changed %s to %s" % (old_name, name) )
+                )
+        
+        return name
+
 
 class ADFS_exception(Exception):
 
@@ -198,6 +312,10 @@ class ADFSmap(Utilities):
     
         return self.disc_map[index]
     
+    def has_key(self, key):
+    
+        return self.disc_map.has_key(key)
+    
     def _read_freespace(self):
     
         # Currently unused
@@ -235,6 +353,7 @@ class ADFSmap(Utilities):
         boot = self._read_unsigned_byte(self.sectors[base+self.sector_size-3])
     
         checksum1 = self._read_unsigned_byte(self.sectors[base+self.sector_size-1])
+
 
 class ADFSnewMap(ADFSmap):
 
@@ -689,6 +808,7 @@ class ADFSnewMap(ADFSmap):
     
         return ((addr - begin) * self.sector_size)
 
+
 class ADFSbigNewMap(ADFSnewMap):
 
     dir_markers = ('Nick',)
@@ -712,9 +832,11 @@ class ADFSbigNewMap(ADFSnewMap):
         
         return ((addr - begin) - (upper * 0xc8)) * 0x200
 
+
 class ADFSoldMap(ADFSmap):
 
     pass
+
 
 class ADFSdisc(Utilities):
 
@@ -1396,31 +1518,6 @@ class ADFSdisc(Utilities):
             
                 self.print_catalogue(obj.files, path + "." + name, filetypes)
     
-    def _convert_name(self, old_name, convert_dict):
-    
-        # Use the conversion dictionary to convert any forbidden
-        # characters to accepted local substitutes.
-        name = ""
-        
-        for c in old_name:
-        
-            if c in convert_dict.keys():
-            
-                name = name + convert_dict[c]
-            
-            else:
-            
-                name = name + c
-        
-        if self.verify and old_name != name:
-        
-            self.verify_log.append(
-                ( WARNING,
-                  "Changed %s to %s" % (old_name, name) )
-                )
-        
-        return name
-    
     def _extract_old_files(self, objects, path, filetypes = 0, separator = ",",
                            convert_dict = {}, with_time_stamps = False):
     
@@ -1610,94 +1707,6 @@ class ADFSdisc(Utilities):
                 files, out_path, filetypes, separator, convert_dict,
                 with_time_stamps
                 )
-    
-    def _create_directory(self, path, name = None):
-    
-        elements = []
-        
-        while not os.path.exists(path) and path != "":
-        
-            path, file = os.path.split(path)
-            
-            elements.insert(0, file)
-        
-        if path != "":
-        
-            elements.insert(0, path)
-        
-        if name is not None:
-        
-            elements.append(name)
-        
-        # Remove any empty list elements or those containing a $ character.
-        elements = filter(lambda x: x != '' and x != "$", elements)
-        
-        try:
-        
-            built = ""
-            
-            for element in elements:
-            
-                built = os.path.join(built, element)
-                
-                if not os.path.exists(built):
-                
-                    # This element of the directory does not exist.
-                    # Create a directory here.
-                    os.mkdir(built)
-                    print 'Created directory:', built
-                
-                elif not os.path.isdir(built):
-                
-                    # This element of the directory already exists
-                    # but is not a directory.
-                    print 'A file exists which prevents a ' + \
-                        'directory from being created: %s' % built
-                    
-                    return ""
-        
-        except OSError:
-        
-            print 'Directory could not be created: %s' % \
-                string.join(elements, os.sep)
-            
-            return ""
-        
-        # Success
-        return built
-    
-    def _plural(self, msg, values, words):
-    
-        """Returns a message which takes into account the plural form of
-        words in the original message, assuming that the appropriate
-        form for negative numbers of items is the same as that for
-        more than one item.
-        
-        values is a list of numeric values referenced in the message.
-        words is a list of sequences of words to substitute into the
-        message. This takes the form
-        
-            [ word_to_use_for_zero_items,
-              word_to_use_for_one_item,
-              word_to_use_for_two_or_more_items ]
-        
-        The length of the values and words lists must be equal.
-        """
-        
-        substitutions = []
-        
-        for i in range(0, len(values)):
-        
-            n = values[i]
-            
-            # Each number must be mapped to a value in the range [0, 2].
-            if n > 1: n = 2
-            elif n < 0: n = 2
-            
-            substitutions.append(values[i])
-            substitutions.append(words[i][n])
-        
-        return msg % tuple(substitutions)
     
     def print_log(self, verbose = 0):
     
