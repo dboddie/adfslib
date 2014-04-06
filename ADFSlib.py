@@ -315,44 +315,6 @@ class ADFSmap(Utilities):
     def has_key(self, key):
     
         return self.disc_map.has_key(key)
-    
-    def _read_freespace(self):
-    
-        # Currently unused
-            
-        base = 0
-    
-        free = []
-        p = 0
-        while self.sectors[base+p] != 0:
-    
-            free.append(self._str2num(3, self.sectors[base+p:base+p+3]))
-    
-        name = self.sectors[self.sector_size-9:self.sector_size-4]
-    
-        disc_size = self._str2num(
-            3, self.sectors[self.sector_size-4:self.sector_size-1]
-            )
-    
-        checksum0 = self._read_unsigned_byte(self.sectors[self.sector_size-1])
-    
-        base = self.sector_size
-    
-        p = 0
-        while self.sectors[base+p] != 0:
-    
-            free.append(self._str2num(3, self.sectors[base+p:base+p+3]))
-    
-        name = name + \
-            self.sectors[base+self.sector_size-10:base+self.sector_size-5]
-    
-        disc_id = self._str2num(
-            2, self.sectors[base+self.sector_size-5:base+self.sector_size-3]
-            )
-    
-        boot = self._read_unsigned_byte(self.sectors[base+self.sector_size-3])
-    
-        checksum1 = self._read_unsigned_byte(self.sectors[base+self.sector_size-1])
 
 
 class ADFSnewMap(ADFSmap):
@@ -834,8 +796,45 @@ class ADFSbigNewMap(ADFSnewMap):
 
 
 class ADFSoldMap(ADFSmap):
-
-    pass
+    
+    def _read_free_space(self):
+    
+        # Currently unused
+        
+        base = 0
+        free_space = []
+        p = 0
+        while self.sectors[base+p] != 0:
+    
+            free.append(self._str2num(3, self.sectors[base+p:base+p+3]))
+    
+        name = self.sectors[self.sector_size-9:self.sector_size-4]
+    
+        disc_size = self._str2num(
+            3, self.sectors[self.sector_size-4:self.sector_size-1]
+            )
+    
+        checksum0 = self._read_unsigned_byte(self.sectors[self.sector_size-1])
+    
+        base = self.sector_size
+    
+        p = 0
+        while self.sectors[base+p] != 0:
+    
+            free.append(self._str2num(3, self.sectors[base+p:base+p+3]))
+    
+        name = name + \
+            self.sectors[base+self.sector_size-10:base+self.sector_size-5]
+    
+        disc_id = self._str2num(
+            2, self.sectors[base+self.sector_size-5:base+self.sector_size-3]
+            )
+    
+        boot = self._read_unsigned_byte(self.sectors[base+self.sector_size-3])
+    
+        checksum1 = self._read_unsigned_byte(self.sectors[base+self.sector_size-1])
+        
+        return free_space
 
 
 class ADFSdisc(Utilities):
@@ -988,6 +987,11 @@ class ADFSdisc(Utilities):
     
     def _identify_format(self, adf):
     
+        """Returns a string containing the disc format for the disc image
+        accessed by the file object, adf. This method is used to determine the
+        format for 800K disc images (either D or E format).
+        """
+        
         # Look for a valid disc record when determining whether the disc
         # image represents an 800K D or E format floppy disc. First, the
         # disc image needs to be read.
@@ -1126,6 +1130,10 @@ class ADFSdisc(Utilities):
     
     def _read_disc_record(self, offset):
     
+        """Reads the disc record for D and E format disc images and returns a
+        dictionary describing the disc image.
+        """
+        
         # Total sectors per track (sectors * heads)
         log2_sector_size = ord(self.sectors[offset])
         # Sectors per track
@@ -1266,28 +1274,6 @@ class ADFSdisc(Utilities):
                     'Less than %i tracks found.' % self.ntracks
         
         return t
-    
-    def _read_sectors(self, adf):
-    
-        s = []
-        try:
-        
-            for i in range(0, self.ntracks):
-            
-                for j in range(0, self.nsectors):
-                
-                    s.append(adf.read(self.sector_size))
-        
-        except IOError:
-        
-            print 'Less than %i tracks x %i sectors found.' % \
-                (self.ntracks, self.nsectors)
-            adf.close()
-            raise ADFS_exception, \
-                'Less than %i tracks x %i sectors found.' % \
-                (self.ntracks, self.nsectors)
-        
-        return s
     
     def _read_old_catalogue(self, base):
     
