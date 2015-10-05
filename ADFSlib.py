@@ -796,7 +796,7 @@ class ADFSbigNewMap(ADFSnewMap):
 
 
 class ADFSoldMap(ADFSmap):
-    
+
     def _read_free_space(self):
     
         # Currently unused
@@ -805,33 +805,33 @@ class ADFSoldMap(ADFSmap):
         free_space = []
         p = 0
         while self.sectors[base+p] != 0:
-    
+        
             free.append(self._str2num(3, self.sectors[base+p:base+p+3]))
-    
+        
         name = self.sectors[self.sector_size-9:self.sector_size-4]
-    
+        
         disc_size = self._str2num(
             3, self.sectors[self.sector_size-4:self.sector_size-1]
             )
-    
+        
         checksum0 = self._read_unsigned_byte(self.sectors[self.sector_size-1])
-    
+        
         base = self.sector_size
-    
+        
         p = 0
         while self.sectors[base+p] != 0:
-    
+        
             free.append(self._str2num(3, self.sectors[base+p:base+p+3]))
-    
+        
         name = name + \
             self.sectors[base+self.sector_size-10:base+self.sector_size-5]
-    
+        
         disc_id = self._str2num(
             2, self.sectors[base+self.sector_size-5:base+self.sector_size-3]
             )
-    
+        
         boot = self._read_unsigned_byte(self.sectors[base+self.sector_size-3])
-    
+        
         checksum1 = self._read_unsigned_byte(self.sectors[base+self.sector_size-1])
         
         return free_space
