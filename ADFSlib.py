@@ -322,19 +322,24 @@ class ADFSnewMap(ADFSmap):
     dir_markers = ('Hugo', 'Nick')
     root_dir_address = 0x800
     
-    def __init__(self, header, begin, end, sectors, sector_size):
+    def __init__(self, header, begin, end, sectors, sector_size, record):
     
         self.header = header
         self.begin = begin
         self.end = end
         self.sectors = sectors
         self.sector_size = sector_size
+        self.record = record
         
         self.free_space = self._read_free_space()
         self.disc_map = self._read_disc_map()
     
     def _read_disc_map(self):
     
+        # See ADFS/EMaps.htm, ADFS/EFormat.htm and ADFS/DiscMap.htm for details.
+        
+        ### TODO: This needs to take into account multiple zones.
+        
         disc_map = {}
         
         a = self.begin
@@ -425,7 +430,7 @@ class ADFSnewMap(ADFSmap):
                         
                         if [start_addr, end_addr] not in disc_map[entry]:
                         
-                            disc_map[entry].append( [start_addr, end_addr] )
+                            disc_map[entry].append((start_addr, end_addr))
                 
                 else:
                 
@@ -461,7 +466,7 @@ class ADFSnewMap(ADFSmap):
                     if [start_addr, end_addr] not in disc_map[current_piece]:
                     
                         disc_map[current_piece].append(
-                            [ start_addr, end_addr]
+                            (start_addr, end_addr)
                             )
                     
                     # Look for a new fragment.
@@ -538,7 +543,7 @@ class ADFSnewMap(ADFSmap):
                 
                 # Record the offset into the map of this item of free space
                 # and the offset of the byte after it ends.
-                free_space.append( (a, c) )
+                free_space.append((a, c))
                 
                 if next == 0:
                 
@@ -673,7 +678,10 @@ class ADFSnewMap(ADFSmap):
                         file = file + self.sectors[start : (start + amount)]
                         remaining = remaining - amount
                     
-                    files.append(ADFSfile(name, file, load, exe, length))
+                    file_obj = ADFSfile(name, file, load, exe, length)
+                    # Store the SIN (System Internal Number) for debugging.
+                    file_obj.addr = self._str2num(3, self.sectors[head+p+22:head+p+25])
+                    files.append(file_obj)
             
             p = p + 26
         
@@ -746,13 +754,12 @@ class ADFSnewMap(ADFSmap):
         pieces = self._find_in_new_map(file_no)
         
         if pieces == []:
-        
             return -1
         
         # Ensure that the first piece of data is read from the appropriate
         # point in the relevant sector.
-        
-        pieces[0][0] = pieces[0][0] + address
+        pieces = pieces[:]
+        pieces[0] = (pieces[0][0] + address, pieces[0][1])
         
         return pieces
     
@@ -1002,7 +1009,7 @@ class ADFSdisc(Utilities):
         
         # This will be done again for E format and later discs.
         
-        record = self._read_disc_record(4)
+        self.disc_record = record = self._read_disc_record(4)
         
         # Define a checklist of criteria to satisfy.
         checklist = \
@@ -1134,6 +1141,8 @@ class ADFSdisc(Utilities):
         dictionary describing the disc image.
         """
         
+        # See ADFS/DiscRecord.htm for details.
+        
         # Total sectors per track (sectors * heads)
         log2_sector_size = ord(self.sectors[offset])
         # Sectors per track
@@ -1210,7 +1219,7 @@ class ADFSdisc(Utilities):
             self.map_start, self.map_end = 0x40, 0x400
             self.disc_map = ADFSnewMap(self.map_header, self.map_start,
                                        self.map_end, self.sectors,
-                                       self.sector_size)
+                                       self.sector_size, self.record)
             
             return self.record['disc name']
         
@@ -1224,7 +1233,7 @@ class ADFSdisc(Utilities):
             self.map_start, self.map_end = 0xc6840, 0xc7800
             self.disc_map = ADFSbigNewMap(self.map_header, self.map_start,
                                           self.map_end, self.sectors,
-                                          self.sector_size)
+                                          self.sector_size, self.record)
             
             return self.record['disc name']
         
