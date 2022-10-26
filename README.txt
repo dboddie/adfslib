@@ -25,6 +25,7 @@ Various documents from J.G. Harston (http://mdfs.net/Docs/Comp/Disk/Format/)
 and Robin Watts (http://wss.co.uk/pinknoise/Docs/index.html) have proved to be
 invaluable references when developing these libraries and tools.
 
+Updated by Dominic Ford, 28 June 2022, for Python 3 compatibility.
 
 Description
 
@@ -45,6 +46,13 @@ Install ADFSlib and ADF2INF (as root) by typing
 
 or just use them from the directory in which you unpack them.
 
+Example usage
+
+  # List the contents of an ADF file
+  python3 -c "import adfs_lib_py3 ; adfs_lib_py3.ADFSdisc(adf=open('S1.ADF','rb'),verify=1).print_catalogue()"
+
+  # Dump all of the files from an ADF file
+  python3 -c "import adfs_lib_py3 ; adfs_lib_py3.ADFSdisc(adf=open('FILES1.ADF','rb'),verify=1).extract_files(out_path='/tmp/my_disc/')"
 
 History
 
