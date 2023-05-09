@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """
 ADFSlib.py, a library for reading ADFS disc images.
@@ -24,10 +24,12 @@ __date__ = "Sun 29th August 2010"
 __version__ = "0.42"
 __license__ = "GNU General Public License (version 3)"
 
+import argparse
 import logging
 import os
 import string
 import struct
+import sys
 import time
 import traceback
 from functools import reduce
@@ -98,27 +100,27 @@ class Utilities:
 
     def _safe(self, s, with_space=0):
         if isinstance(s, str):
-            s = s.encode('utf-8')
+            s = s.encode('iso-8859-1')
 
-        new = ""
+        # Position of the last character in this byte string
+        filename_bytes = bytearray()
+
+        # What is the lowest allowed ASCII value in this string?
         if with_space == 1:
             lower = 31
         else:
             lower = 32
 
-        for i in s:
-
-            if i <= lower:
+        # Loop through the input string until we find a terminator character
+        for index, byte_val in enumerate(s):
+            if (byte_val & 0x7F) <= lower:
+                # Invalid byte
                 break
-
-            if i >= 128:
-                c = i ^ 128
-                if c > 32:
-                    new = new + chr(c)
             else:
-                new = new + chr(i)
+                # Valid byte
+                filename_bytes.append(byte_val & 0x7F)
 
-        return new
+        return filename_bytes.decode('iso-8859-1')
 
     def _plural(self, msg, values, words):
 
@@ -550,7 +552,7 @@ class ADFSnewMap(ADFSmap):
         p = 0
 
         dir_seq = self.sectors[head + p]
-        dir_start = self.sectors[head + p + 1:head + p + 5].decode('utf-8')
+        dir_start = self.sectors[head + p + 1:head + p + 5].decode(encoding='iso-8859-1', errors='replace')
         if dir_start not in self.dir_markers:
 
             if self.verify:
@@ -669,7 +671,8 @@ class ADFSnewMap(ADFSmap):
 
         tail = head + self.sector_size
 
-        dir_end = self.sectors[tail + self.sector_size - 5:tail + self.sector_size - 1].decode('utf-8')
+        dir_end = self.sectors[tail + self.sector_size - 5:tail + self.sector_size - 1].decode(encoding='iso-8859-1',
+                                                                                               errors='replace')
 
         if dir_end not in self.dir_markers:
 
@@ -1018,7 +1021,7 @@ class ADFSdisc(Utilities):
         # Check the data at the root directory location.
 
         adf.seek((record["root dir"] * record["sector size"]) + 1, 0)
-        word = adf.read(4).decode('utf-8')
+        word = adf.read(4).decode(encoding='iso-8859-1', errors='replace')
 
         if word == "Hugo" or word == "Nick":
             # A valid directory identifier was found.
@@ -1160,7 +1163,7 @@ class ADFSdisc(Utilities):
         # DiscId
         disc_id = self._read_unsigned_half_word(self.sectors[offset + 20: offset + 22])
         # DiscName
-        disc_name = self.sectors[offset + 22: offset + 32].decode('utf-8', errors='replace').strip()
+        disc_name = self.sectors[offset + 22: offset + 32].decode(encoding='iso-8859-1', errors='replace').strip()
 
         return {'sectors': nsectors, 'log2 sector size': log2_sector_size,
                 'sector size': 2 ** log2_sector_size, 'heads': heads,
@@ -1268,12 +1271,10 @@ class ADFSdisc(Utilities):
         while self.sectors[head + p] != 0:
 
             old_name = self.sectors[head + p:head + p + 10]
-            top_set = 0
-            counter = 1
-            for i in old_name:
-                if (i & 128) != 0:
-                    top_set = counter
-                counter = counter + 1
+            top_set = [0] * len(old_name)
+            for i, v in enumerate(old_name):
+                if (v & 128) != 0:
+                    top_set[i] = 1
 
             name = self._safe(self.sectors[head + p:head + p + 10])
 
@@ -1313,8 +1314,8 @@ class ADFSdisc(Utilities):
 
                 # Old format < 800K discs.
                 # [Needs more accurate check for directories.]
-                if (load == 0 and exe == 0 and top_set > 2) or \
-                        (top_set > 0 and length == (self.sector_size * 5)):
+                if (load == 0 and exe == 0 and top_set[3]) or \
+                        (top_set[3] and length == (self.sector_size * 5)):
 
                     # A directory has been found.
                     lower_dir_name, lower_files = \
@@ -1337,7 +1338,8 @@ class ADFSdisc(Utilities):
         else:
             tail = head + (self.sector_size * 4)  # 1024 bytes
 
-        dir_end = self.sectors[tail + self.sector_size - 5:tail + self.sector_size - 1].decode('utf-8')
+        dir_end = self.sectors[tail + self.sector_size - 5:tail + self.sector_size - 1].decode(encoding='iso-8859-1',
+                                                                                               errors='replace')
         if dir_end not in self.dir_markers:
 
             if self.verify:
@@ -1398,9 +1400,9 @@ class ADFSdisc(Utilities):
 
         return dir_name, files
 
-    def print_catalogue(self, files=None, path="$", filetypes=0):
+    def print_catalogue_str(self, files=None, path="$", filetypes=0) -> str:
 
-        """Prints the contents of the disc catalogue to standard output.
+        """Prints the contents of the disc catalogue to a string.
         Usually, this method is called without specifying any of the keyword
         arguments, but these can be used to customise the output.
         
@@ -1418,11 +1420,13 @@ class ADFSdisc(Utilities):
         will be displayed instead.
         """
 
+        output: str = ""
+
         if files is None:
             files = self.files
 
         if files == []:
-            print(path, "(empty)")
+            output += "{} (empty)\n".format(path)
 
         for obj in files:
 
@@ -1432,11 +1436,10 @@ class ADFSdisc(Utilities):
                 if not filetypes:
 
                     # Load and execution addresses treated as valid.
-                    print(
-                        ("%s.%s\t%X\t%X\t%X" % (
-                            path, name, obj.load_address,
-                            obj.execution_address, obj.length
-                        )).expandtabs(16)
+                    output += "{:44s}  {:08X}    {:08X}    {:08X}\n".format(
+                        "{}.{}".format(path, name),
+                        obj.load_address,
+                        obj.execution_address, obj.length
                     )
 
                 else:
@@ -1446,26 +1449,102 @@ class ADFSdisc(Utilities):
 
                     time_stamp = obj.time_stamp()
                     if not time_stamp or not obj.has_filetype():
-
-                        print(
-                            ("%s.%s\t%X\t%X\t%X" % (
-                                path, name, obj.load_address,
-                                obj.execution_address, obj.length
-                            )).expandtabs(16)
+                        output += "{:44s}  {:08X}    {:08X}    {:08X}\n".format(
+                            "{}.{}".format(path, name),
+                            obj.load_address,
+                            obj.execution_address, obj.length
                         )
                     else:
 
                         time_stamp = time.strftime("%H:%M:%S, %a %m %b %Y", time_stamp)
-                        print(
-                            ("%s.%s\t%s\t%s\t%X" % (
-                                path, name, obj.filetype().upper(), time_stamp,
-                                obj.length
-                            )).expandtabs(16)
+                        output += "{:44s}  {:8s}    {:20s}    {:08X}\n".format(
+                            "{}.{}".format(path, name),
+                            obj.filetype().upper(), time_stamp,
+                            obj.length
                         )
 
             else:
 
-                self.print_catalogue(obj.files, path + "." + name, filetypes)
+                output += self.print_catalogue_str(obj.files, path + "." + name, filetypes)
+        return output
+
+    def print_catalogue_html(self, files=None, path="$", filetypes=0, include_headers=True) -> str:
+
+        """Prints the contents of the disc catalogue to an HTML table.
+        Usually, this method is called without specifying any of the keyword
+        arguments, but these can be used to customise the output.
+
+        If files is None, the contents of the entire disc will be shown.
+        A subset of the list of files obtained from the instance's files
+        attribute can be passed if only a subset of the catalogue needs to
+        be displayed.
+
+        The path parameter specifies the representation of the root directory
+        in the output. By default, root directories are represented by the
+        familiar "$" symbol.
+
+        If filetypes is set to True or a non-False value, the file types of
+        each file will be displayed; otherwise, load and execution addresses
+        will be displayed instead.
+        """
+
+        output: str = ""
+
+        if include_headers:
+            output += """\
+<table class="disk_index"><thead>
+<tr><td>Filename</td><td>Load addr</td><td>Exec addr</td><td>Size</td></tr>
+</thead><tbody>
+"""
+
+        if files is None:
+            files = self.files
+
+        if len(files) == 0:
+            output += "<tr><td>{:s}</td><td colspan='3' style='text-align:center;'>(empty)</td></tr>\n".format(path)
+
+        for obj in files:
+
+            name = obj.name
+            if isinstance(obj, ADFSfile):
+
+                if not filetypes:
+
+                    # Load and execution addresses treated as valid.
+                    output += "<tr><td>{:s}</td><td>{:08X}</td><td>{:08X}</td><td>{:X}</td></tr>\n".format(
+                        "{}.{}".format(path, name),
+                        obj.load_address,
+                        obj.execution_address, obj.length
+                    )
+
+                else:
+
+                    # Load address treated as a filetype; load and execution
+                    # addresses treated as a time stamp.
+
+                    time_stamp = obj.time_stamp()
+                    if not time_stamp or not obj.has_filetype():
+                        output += "<tr><td>{:s}</td><td>{:08X}</td><td>{:08X}</td><td>{:X}</td></tr>\n".format(
+                            "{}.{}".format(path, name),
+                            obj.load_address,
+                            obj.execution_address, obj.length
+                        )
+                    else:
+
+                        time_stamp = time.strftime("%H:%M:%S, %a %m %b %Y", time_stamp)
+                        output += "<tr><td>{:s}</td><td>{:s}</td><td>{:s}</td><td>{:X}</td></tr>\n".format(
+                            "{}.{}".format(path, name),
+                            obj.filetype().upper(), time_stamp,
+                            obj.length
+                        )
+
+            else:
+
+                output += self.print_catalogue_html(obj.files, path + "." + name, filetypes, include_headers=False)
+
+        if include_headers:
+            output += "</tbody></table>"
+        return output
 
     def _extract_old_files(self, objects, path, filetypes=0, separator=",",
                            convert_dict={}, with_time_stamps=False):
@@ -1687,3 +1766,32 @@ class ADFSdisc(Utilities):
     def disc_format(self):
 
         return self._format_names[self.disc_type]
+
+
+# If we're run as a script, we offer a tool for listing the directories of ADF files
+if __name__ == "__main__":
+    # Read input parameters
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--input',
+                        default="/tmp/REPINF.ADF",
+                        type=str,
+                        dest="input_filename",
+                        help="Input ADF file to list a catalogue for")
+    parser.add_argument('--debug',
+                        action='store_true',
+                        dest="debug",
+                        help="Show full debugging output")
+    parser.set_defaults(debug=False)
+    args = parser.parse_args()
+
+    # Set up a logging object
+    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO,
+                        stream=sys.stdout,
+                        format='[%(asctime)s] %(levelname)s:%(filename)s:%(message)s',
+                        datefmt='%d/%m/%Y %H:%M:%S')
+    logger = logging.getLogger(__name__)
+    logger.debug(__doc__.strip())
+
+    # Open input file
+    item = ADFSdisc(adf=open(args.input_filename, "rb"), verify=True)
+    print(item.print_catalogue_str())
